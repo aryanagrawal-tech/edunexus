@@ -792,3 +792,198 @@ def test_frontend_student_js_uses_live_gemini_endpoint(client):
     assert "function generateAIResponse" not in student_js
 
 
+# ==========================================
+# 9. Priorities 1–5 End-to-End Integration Tests
+# ==========================================
+
+def test_priority_1_registration_redirect_in_auth_js(client):
+    """Priority 1: Confirms auth.js redirects to /login?registered=1 with 'Registration successful. Please log in.' on confirmed registration."""
+    auth_js = client.get("/static/js/auth.js").get_data(as_text=True)
+    assert "Registration successful. Please log in." in auth_js
+    assert "/login?registered=1" in auth_js
+    assert "edunexus_registration_success" in auth_js
+
+
+def test_priority_2_newly_registered_student_dashboard_and_admin_overview(client):
+    """Priority 2: Newly registered student sees real profile and 0 submissions (no fabricated data); admin sees real users."""
+    reg_res = client.post("/api/auth/register", json={
+        "fullName": "Neha Verma",
+        "email": "neha.verma@edunexus.edu",
+        "password": "Password123!",
+        "role": "student",
+        "department": "Data Structures"
+    })
+    assert reg_res.status_code == 201
+    new_user = reg_res.get_json()["data"]["user"]
+    student_id = new_user["id"]
+
+    # Fetch student dashboard for the newly registered student
+    dash_res = client.get(f"/api/student/{student_id}/dashboard")
+    assert dash_res.status_code == 200
+    dash_data = dash_res.get_json()["data"]
+    assert dash_data["profile"]["name"] == "Neha Verma"
+    assert dash_data["profile"]["email"] == "neha.verma@edunexus.edu"
+    assert dash_data["metrics"]["total_submissions"] == 0
+    assert dash_data["metrics"]["overall_score"] == 0.0
+    assert dash_data["weak_topics"] == []
+    assert dash_data["recommendations"] == []
+
+    # Verify Admin Overview includes Neha Verma and supports status updates
+    admin_res = client.get("/api/admin/overview")
+    assert admin_res.status_code == 200
+    admin_data = admin_res.get_json()["data"]
+    assert admin_data["metrics"]["students_count"] >= 1
+    emails = [u["email"] for u in admin_data["users"]]
+    assert "neha.verma@edunexus.edu" in emails
+
+    status_res = client.post("/api/admin/users/status", json={
+        "role": "student",
+        "record_id": student_id,
+        "status": "Suspended"
+    })
+    assert status_res.status_code == 200
+    assert status_res.get_json()["data"]["status"] == "Suspended"
+
+
+def test_priority_3_faculty_student_interventions_and_targeted_practice(client):
+    """Priority 3: Student 1-to-1 help requests, faculty responses, and targeted practice assignment."""
+    # 1. Student requests 1-to-1 office hours
+    req_res = client.post("/api/interventions", json={
+        "student_id": 1,
+        "student_name": "Aanya Patel",
+        "course_code": "CS-301",
+        "topic": "Recursion",
+        "intervention_type": "office_hours",
+        "initiated_by": "student",
+        "title": "1-to-1 Office Hours Request: Recursion",
+        "details": "Need help tracing recursion tree depth."
+    })
+    assert req_res.status_code == 201
+    intervention = req_res.get_json()["data"]
+    intervention_id = intervention["id"]
+    assert intervention["status"] == "open"
+
+    # 2. Student cannot respond as faculty (role-based validation 403)
+    forbidden_res = client.post(f"/api/interventions/{intervention_id}/respond", json={
+        "role": "student",
+        "status": "resolved",
+        "faculty_response": "Self-approving"
+    })
+    assert forbidden_res.status_code == 403
+
+    # 3. Faculty responds to the student's help request
+    resp_res = client.post(f"/api/interventions/{intervention_id}/respond", json={
+        "role": "faculty",
+        "status": "scheduled",
+        "faculty_response": "Office hours scheduled for Thursday at 3 PM.",
+        "faculty_name": "Dr. Sarah Mitchell"
+    })
+    assert resp_res.status_code == 200
+    updated_int = resp_res.get_json()["data"]
+    assert updated_int["status"] == "scheduled"
+    assert "Thursday at 3 PM" in updated_int["faculty_response"]
+
+    # 4. Faculty assigns targeted remedial quiz to Student #1
+    act_res = client.post("/api/activities", json={
+        "role": "faculty",
+        "title": "Recursion Remedial Practice Set",
+        "topic": "Recursion",
+        "activity_type": "quiz",
+        "max_score": 100,
+        "assigned_student_id": 1,
+        "instructions": "Complete base-case and recurrence relation problems."
+    })
+    assert act_res.status_code == 201
+    act_data = act_res.get_json()["data"]
+    assert act_data["assigned_student_id"] == 1
+
+
+def test_priority_4_unified_course_hub_and_evaluation_queue(client):
+    """Priority 4: Course Hub announcements/materials and Submissions & Evaluation Queue."""
+    # Student role is blocked from publishing announcements or materials
+    assert client.post("/api/announcements", json={
+        "role": "student",
+        "title": "Unauthorized",
+        "message": "Should fail"
+    }).status_code == 403
+
+    assert client.post("/api/course-materials", json={
+        "role": "student",
+        "title": "Unauthorized",
+        "content_or_url": "Should fail"
+    }).status_code == 403
+
+    # Faculty publishes announcement and material
+    ann_res = client.post("/api/announcements", json={
+        "role": "faculty",
+        "course_code": "CS-301",
+        "title": "Midterm Exam Guidelines",
+        "message": "Review Arrays, Stacks, and Recursion modules.",
+        "priority": "important",
+        "published_by": "Dr. Sarah Mitchell"
+    })
+    assert ann_res.status_code == 201
+
+    mat_res = client.post("/api/course-materials", json={
+        "role": "faculty",
+        "course_code": "CS-301",
+        "title": "Recursion & Call Stack Notes",
+        "topic": "Recursion",
+        "resource_type": "Lecture Notes",
+        "content_or_url": "Comprehensive guide to base cases and stack frames.",
+        "uploaded_by": "Dr. Sarah Mitchell"
+    })
+    assert mat_res.status_code == 201
+
+    hub_res = client.get("/api/course-hub?course_code=CS-301")
+    assert hub_res.status_code == 200
+    hub_data = hub_res.get_json()["data"]
+    assert any(a["title"] == "Midterm Exam Guidelines" for a in hub_data["announcements"])
+    assert any(m["title"] == "Recursion & Call Stack Notes" for m in hub_data["materials"])
+
+    # Student submits assignment response for evaluation
+    sub_res = client.post("/api/submissions", json={
+        "student_id": 1,
+        "activity_id": 1,
+        "response_text": "Implemented O(n) two-pointer array traversal.",
+        "status": "pending_review"
+    })
+    assert sub_res.status_code == 201
+    submission_id = sub_res.get_json()["data"]["id"]
+
+    # Student cannot grade their own submission (403)
+    assert client.post(f"/api/submissions/{submission_id}/evaluate", json={
+        "role": "student",
+        "score": 100
+    }).status_code == 403
+
+    # Faculty evaluates submission with marks and written feedback
+    eval_res = client.post(f"/api/submissions/{submission_id}/evaluate", json={
+        "role": "faculty",
+        "score": 92,
+        "feedback": "Excellent time complexity analysis and clean edge-case handling.",
+        "evaluated_by": "Dr. Sarah Mitchell"
+    })
+    assert eval_res.status_code == 200
+    eval_data = eval_res.get_json()["data"]
+    assert eval_data["score"] == 92.0
+    assert eval_data["status"] == "evaluated"
+    assert "Excellent time complexity" in eval_data["feedback"]
+
+
+def test_priority_5_faculty_overview_explainable_insights(client):
+    """Priority 5: Faculty overview includes explainable insights grounded in real submission evidence."""
+    res = client.get("/api/faculty/overview")
+    assert res.status_code == 200
+    data = res.get_json()["data"]
+    assert "explainable_insights" in data
+    assert "insights_meta" in data
+    assert data["insights_meta"]["has_sufficient_data"] is True
+    assert len(data["explainable_insights"]) >= 1
+    first_insight = data["explainable_insights"][0]
+    assert "topic" in first_insight
+    assert "evidence" in first_insight and isinstance(first_insight["evidence"], list)
+    assert "recommended_action" in first_insight
+
+
+

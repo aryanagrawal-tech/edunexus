@@ -22,6 +22,13 @@ MOCK_FILE_PATH = BASE_DIR / "mock_data.json"
 load_dotenv(dotenv_path=ENV_FILE_PATH, override=True)
 
 
+def _strip_sensitive_fields(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Removes sensitive columns such as password_hash before returning records."""
+    if not isinstance(row, dict):
+        return row
+    return {k: v for k, v in row.items() if k not in ("password_hash", "password")}
+
+
 @dataclass
 class _PostgRESTResponse:
     """Normalized response object matching supabase-py execute() return signature."""
@@ -43,7 +50,6 @@ class _PostgRESTTableQuery:
 
     def select(self, columns: str = "*") -> "_PostgRESTTableQuery":
         self._method = "GET"
-        # PostgREST expects no spaces around commas in embedded resource selects
         self._select_cols = ",".join(part.strip() for part in columns.split(","))
         return self
 
@@ -65,6 +71,11 @@ class _PostgRESTTableQuery:
         self._payload = payload
         return self
 
+    def update(self, payload: Dict[str, Any]) -> "_PostgRESTTableQuery":
+        self._method = "PATCH"
+        self._payload = payload
+        return self
+
     def execute(self) -> _PostgRESTResponse:
         headers = {
             "apikey": self.api_key,
@@ -78,6 +89,14 @@ class _PostgRESTTableQuery:
             body = json.dumps(self._payload or {}).encode("utf-8")
             req = urllib.request.Request(
                 self.endpoint, data=body, headers=headers, method="POST"
+            )
+        elif self._method == "PATCH":
+            headers["Prefer"] = "return=representation"
+            query_string = urllib.parse.urlencode(self._filters, safe="(),.*")
+            url = f"{self.endpoint}?{query_string}" if query_string else self.endpoint
+            body = json.dumps(self._payload or {}).encode("utf-8")
+            req = urllib.request.Request(
+                url, data=body, headers=headers, method="PATCH"
             )
         else:
             params: List[tuple] = [("select", self._select_cols)]
@@ -232,7 +251,6 @@ class DatabaseService:
         """Attempts to initialize the Supabase client and verify read access."""
         self._load_credentials()
 
-        # 1. Check missing environment variables
         if not self.supabase_url or not self.supabase_key:
             self.is_connected = False
             self.client = None
@@ -251,7 +269,6 @@ class DatabaseService:
             )
             return False
 
-        # 2. Check placeholder credentials from .env.example
         if (
             self.supabase_url.startswith("https://your-project")
             or "your-anon-or-service-role-key" in self.supabase_key
@@ -267,7 +284,6 @@ class DatabaseService:
             )
             return False
 
-        # 3. Validate URL format
         parsed_url = urllib.parse.urlparse(self.supabase_url)
         if parsed_url.scheme not in ("https", "http") or not parsed_url.netloc:
             self.is_connected = False
@@ -280,15 +296,12 @@ class DatabaseService:
             )
             return False
 
-        # 4. Initialize client (try official supabase-py SDK first, then PostgREST HTTP client)
         candidate_clients = []
         try:
             from supabase import create_client
             sdk_client = create_client(self.supabase_url, self.supabase_key)
             candidate_clients.append(("supabase_sdk", sdk_client))
         except Exception:
-            # If supabase SDK is not installed in the active Python environment
-            # or encounters httpx/gotrue version incompatibility, fall back to PostgREST HTTP
             pass
 
         candidate_clients.append(
@@ -313,7 +326,6 @@ class DatabaseService:
             except Exception as err:
                 last_exception = err
 
-        # 5. All candidate drivers failed — classify the failure safely
         self.is_connected = False
         self.client = None
         self.client_driver = "mock_fallback"
@@ -350,8 +362,14 @@ class DatabaseService:
                     "course": "Data Structures",
                     "topics": ["Arrays", "Linked Lists", "Stacks", "Queues", "Recursion"],
                     "students": [],
+                    "faculty": [],
+                    "admins": [],
+                    "courses": [{"id": 1, "course_name": "Data Structures & Algorithms", "course_code": "CS-301"}],
                     "activities": [],
-                    "submissions": []
+                    "submissions": [],
+                    "course_materials": [],
+                    "announcements": [],
+                    "interventions": []
                 }
         return self._mock_data
 
@@ -378,43 +396,170 @@ class DatabaseService:
         }
 
     # ==========================================
-    # Students API
+    # Students, Faculty & Admin User Directory
     # ==========================================
     def get_students(self) -> List[Dict[str, Any]]:
-        """Fetch all enrolled students."""
-        if self._ensure_connection() and self.client:
+        """Fetch all enrolled students without exposing password hashes."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
                 res = self.client.table("students").select("*").order("id").execute()
                 if res.data is not None:
-                    return res.data
+                    return [_strip_sensitive_fields(r) for r in res.data]
             except Exception:
                 pass
-        # Mock fallback
-        return self._get_mock_data().get("students", [])
+        return [_strip_sensitive_fields(r) for r in self._get_mock_data().get("students", [])]
 
     def get_student_by_id(self, student_id: Any) -> Optional[Dict[str, Any]]:
-        """Fetch single student by ID."""
+        """Fetch single student by ID without exposing password hash."""
         try:
             numeric_id = int(student_id)
         except (ValueError, TypeError):
             numeric_id = student_id
 
-        if self._ensure_connection() and self.client:
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
                 res = self.client.table("students").select("*").eq("id", numeric_id).execute()
                 if res.data and len(res.data) > 0:
-                    return res.data[0]
+                    return _strip_sensitive_fields(res.data[0])
             except Exception:
                 pass
 
-        # Mock fallback
         for s in self._get_mock_data().get("students", []):
             if str(s.get("id")) == str(student_id):
-                return s
+                return _strip_sensitive_fields(s)
+        return None
+
+    def get_faculty(self) -> List[Dict[str, Any]]:
+        """Fetch all registered faculty members without exposing password hashes."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = self.client.table("faculty").select("*").order("id").execute()
+                if res.data is not None:
+                    return [_strip_sensitive_fields(r) for r in res.data]
+            except Exception:
+                pass
+        return [_strip_sensitive_fields(r) for r in self._get_mock_data().get("faculty", [])]
+
+    def get_faculty_by_id(self, faculty_id: Any) -> Optional[Dict[str, Any]]:
+        """Fetch single faculty member by ID."""
+        try:
+            numeric_id = int(faculty_id)
+        except (ValueError, TypeError):
+            numeric_id = faculty_id
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = self.client.table("faculty").select("*").eq("id", numeric_id).execute()
+                if res.data and len(res.data) > 0:
+                    return _strip_sensitive_fields(res.data[0])
+            except Exception:
+                pass
+
+        for f in self._get_mock_data().get("faculty", []):
+            if str(f.get("id")) == str(faculty_id):
+                return _strip_sensitive_fields(f)
+        return None
+
+    def get_admins(self) -> List[Dict[str, Any]]:
+        """Fetch all administrator accounts without exposing password hashes."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = self.client.table("admins").select("*").order("id").execute()
+                if res.data is not None:
+                    return [_strip_sensitive_fields(r) for r in res.data]
+            except Exception:
+                pass
+        return [_strip_sensitive_fields(r) for r in self._get_mock_data().get("admins", [])]
+
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """Returns combined real user directory across students, faculty, and admins."""
+        users: List[Dict[str, Any]] = []
+        students = self.get_students()
+        faculty_list = self.get_faculty()
+        admins_list = self.get_admins()
+
+        for s in students:
+            users.append({
+                "id": f"student_{s.get('id')}",
+                "record_id": s.get("id"),
+                "table": "students",
+                "name": s.get("name") or "Student",
+                "email": s.get("email") or "",
+                "role": "Student",
+                "department": s.get("course") or "Data Structures",
+                "status": s.get("status") or "Active",
+                "created_at": s.get("created_at")
+            })
+
+        for f in faculty_list:
+            users.append({
+                "id": f"faculty_{f.get('id')}",
+                "record_id": f.get("id"),
+                "table": "faculty",
+                "name": f.get("full_name") or f.get("name") or "Faculty",
+                "email": f.get("email") or "",
+                "role": "Faculty",
+                "department": f.get("department") or "Computer Science",
+                "status": f.get("status") or "Active",
+                "created_at": f.get("created_at")
+            })
+
+        for a in admins_list:
+            users.append({
+                "id": f"admin_{a.get('id')}",
+                "record_id": a.get("id"),
+                "table": "admins",
+                "name": a.get("full_name") or a.get("name") or "Administrator",
+                "email": a.get("email") or "",
+                "role": "Admin",
+                "department": "Global Institution",
+                "status": a.get("status") or "Active",
+                "created_at": a.get("created_at")
+            })
+
+        return users
+
+    def update_user_status(self, role: str, record_id: Any, status: str) -> Optional[Dict[str, Any]]:
+        """Updates account status (Active / Suspended) in the corresponding role table."""
+        clean_role = (role or "").strip().lower()
+        table_map = {
+            "student": "students",
+            "students": "students",
+            "faculty": "faculty",
+            "admin": "admins",
+            "admins": "admins"
+        }
+        table_name = table_map.get(clean_role)
+        if not table_name:
+            raise ValueError(f"Unsupported role '{role}'.")
+
+        clean_status = "Suspended" if str(status).lower() == "suspended" else "Active"
+        try:
+            numeric_id = int(record_id)
+        except (ValueError, TypeError):
+            numeric_id = record_id
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = (
+                    self.client.table(table_name)
+                    .update({"status": clean_status})
+                    .eq("id", numeric_id)
+                    .execute()
+                )
+                if res.data and len(res.data) > 0:
+                    return _strip_sensitive_fields(res.data[0])
+            except Exception:
+                pass
+
+        for item in self._get_mock_data().setdefault(table_name, []):
+            if str(item.get("id")) == str(record_id):
+                item["status"] = clean_status
+                return _strip_sensitive_fields(item)
         return None
 
     def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        """Look up an existing student or faculty account by email address."""
+        """Look up an existing student, faculty, or admin account by email address."""
         clean_email = (email or "").strip().lower()
         if not clean_email:
             return None
@@ -424,12 +569,16 @@ class DatabaseService:
                 std_res = self.client.table("students").select("*").eq("email", clean_email).execute()
                 if std_res.data and len(std_res.data) > 0:
                     row = std_res.data[0]
+                    if row.get("password_hash"):
+                        self._password_hashes[clean_email] = row["password_hash"]
                     return {
                         "id": row.get("id"),
                         "fullName": row.get("name"),
                         "name": row.get("name"),
                         "email": row.get("email"),
                         "role": "student",
+                        "course": row.get("course") or "Data Structures",
+                        "status": row.get("status") or "Active",
                         "table": "students",
                         "createdAt": row.get("created_at")
                     }
@@ -440,14 +589,36 @@ class DatabaseService:
                 fac_res = self.client.table("faculty").select("*").eq("email", clean_email).execute()
                 if fac_res.data and len(fac_res.data) > 0:
                     row = fac_res.data[0]
+                    if row.get("password_hash"):
+                        self._password_hashes[clean_email] = row["password_hash"]
                     return {
                         "id": row.get("id"),
                         "fullName": row.get("full_name"),
                         "name": row.get("full_name"),
                         "email": row.get("email"),
                         "role": "faculty",
-                        "department": row.get("department"),
+                        "department": row.get("department") or "Computer Science",
+                        "status": row.get("status") or "Active",
                         "table": "faculty",
+                        "createdAt": row.get("created_at")
+                    }
+            except Exception:
+                pass
+
+            try:
+                adm_res = self.client.table("admins").select("*").eq("email", clean_email).execute()
+                if adm_res.data and len(adm_res.data) > 0:
+                    row = adm_res.data[0]
+                    if row.get("password_hash"):
+                        self._password_hashes[clean_email] = row["password_hash"]
+                    return {
+                        "id": row.get("id"),
+                        "fullName": row.get("full_name"),
+                        "name": row.get("full_name"),
+                        "email": row.get("email"),
+                        "role": "admin",
+                        "status": row.get("status") or "Active",
+                        "table": "admins",
                         "createdAt": row.get("created_at")
                     }
             except Exception:
@@ -463,6 +634,8 @@ class DatabaseService:
                     "name": s.get("name"),
                     "email": s.get("email"),
                     "role": "student",
+                    "course": s.get("course") or "Data Structures",
+                    "status": s.get("status") or "Active",
                     "table": "students",
                     "createdAt": s.get("created_at")
                 }
@@ -474,14 +647,32 @@ class DatabaseService:
                     "name": f.get("full_name"),
                     "email": f.get("email"),
                     "role": "faculty",
+                    "department": f.get("department") or "Computer Science",
+                    "status": f.get("status") or "Active",
                     "table": "faculty",
                     "createdAt": f.get("created_at")
+                }
+        for a in self._get_mock_data().get("admins", []):
+            if str(a.get("email", "")).strip().lower() == clean_email:
+                return {
+                    "id": a.get("id"),
+                    "fullName": a.get("full_name"),
+                    "name": a.get("full_name"),
+                    "email": a.get("email"),
+                    "role": "admin",
+                    "status": a.get("status") or "Active",
+                    "table": "admins",
+                    "createdAt": a.get("created_at")
                 }
         return None
 
     def get_password_hash(self, email: str) -> Optional[str]:
-        """Retrieves the stored password hash for an email if registered in this session."""
+        """Retrieves the stored password hash for an email if present."""
         clean_email = (email or "").strip().lower()
+        if clean_email in self._password_hashes:
+            return self._password_hashes[clean_email]
+        # Populate cache from database if user exists
+        self.get_user_by_email(clean_email)
         return self._password_hashes.get(clean_email)
 
     def register_user(
@@ -494,8 +685,8 @@ class DatabaseService:
     ) -> Dict[str, Any]:
         """
         Persists a newly registered Student or Faculty account into Supabase PostgreSQL.
-        - Students are inserted into public.students (name, email).
-        - Faculty are inserted into public.faculty (full_name, email, department).
+        - Students are inserted into public.students (name, email, password_hash).
+        - Faculty are inserted into public.faculty (full_name, email, department, password_hash).
         - Raises DuplicateAccountError if the email is already registered.
         - Raises RuntimeError if the database connection or insert fails.
         """
@@ -508,18 +699,23 @@ class DatabaseService:
         if clean_role not in ("student", "faculty"):
             raise ValueError("Role must be 'student' or 'faculty'.")
 
-        # 1. Check for duplicate email before inserting
         existing = self.get_user_by_email(clean_email)
         if existing is not None:
             raise DuplicateAccountError(f"An account with email '{clean_email}' is already registered.")
 
-        # 2. Automated test mode (isolated from live Supabase mutations)
         if self._is_testing_mode():
             now_iso = datetime.now(timezone.utc).isoformat()
             if clean_role == "student":
                 students_list = self._get_mock_data().setdefault("students", [])
                 new_id = max([int(s.get("id", 0)) for s in students_list] + [0]) + 1
-                record = {"id": new_id, "name": clean_name, "email": clean_email, "created_at": now_iso}
+                record = {
+                    "id": new_id,
+                    "name": clean_name,
+                    "email": clean_email,
+                    "course": department or "Data Structures",
+                    "status": "Active",
+                    "created_at": now_iso
+                }
                 students_list.append(record)
                 self._password_hashes[clean_email] = password_hash
                 return {
@@ -528,6 +724,7 @@ class DatabaseService:
                     "name": clean_name,
                     "email": clean_email,
                     "role": "student",
+                    "course": record["course"],
                     "table": "students",
                     "createdAt": now_iso
                 }
@@ -539,6 +736,7 @@ class DatabaseService:
                     "full_name": clean_name,
                     "email": clean_email,
                     "department": department or "Computer Science",
+                    "status": "Active",
                     "created_at": now_iso
                 }
                 faculty_list.append(record)
@@ -549,11 +747,11 @@ class DatabaseService:
                     "name": clean_name,
                     "email": clean_email,
                     "role": "faculty",
+                    "department": record["department"],
                     "table": "faculty",
                     "createdAt": now_iso
                 }
 
-        # 3. Live Supabase PostgreSQL insert (never falls back to mock data)
         if not self._ensure_connection() or not self.client:
             raise RuntimeError(
                 "Database connection is unavailable. Account could not be saved to Supabase PostgreSQL."
@@ -561,8 +759,15 @@ class DatabaseService:
 
         try:
             if clean_role == "student":
-                payload = {"name": clean_name, "email": clean_email}
-                res = self.client.table("students").insert(payload).execute()
+                payload = {
+                    "name": clean_name,
+                    "email": clean_email,
+                    "password_hash": password_hash
+                }
+                try:
+                    res = self.client.table("students").insert(payload).execute()
+                except Exception:
+                    res = self.client.table("students").insert({"name": clean_name, "email": clean_email}).execute()
                 if not res.data or len(res.data) == 0:
                     raise RuntimeError("Supabase insert into 'students' returned no record.")
                 inserted = res.data[0]
@@ -573,6 +778,7 @@ class DatabaseService:
                     "name": inserted.get("name", clean_name),
                     "email": inserted.get("email", clean_email),
                     "role": "student",
+                    "course": inserted.get("course") or "Data Structures",
                     "table": "students",
                     "createdAt": inserted.get("created_at") or datetime.now(timezone.utc).isoformat()
                 }
@@ -580,9 +786,17 @@ class DatabaseService:
                 payload = {
                     "full_name": clean_name,
                     "email": clean_email,
-                    "department": department or "Computer Science"
+                    "department": department or "Computer Science",
+                    "password_hash": password_hash
                 }
-                res = self.client.table("faculty").insert(payload).execute()
+                try:
+                    res = self.client.table("faculty").insert(payload).execute()
+                except Exception:
+                    res = self.client.table("faculty").insert({
+                        "full_name": clean_name,
+                        "email": clean_email,
+                        "department": department or "Computer Science"
+                    }).execute()
                 if not res.data or len(res.data) == 0:
                     raise RuntimeError("Supabase insert into 'faculty' returned no record.")
                 inserted = res.data[0]
@@ -593,6 +807,7 @@ class DatabaseService:
                     "name": inserted.get("full_name", clean_name),
                     "email": inserted.get("email", clean_email),
                     "role": "faculty",
+                    "department": inserted.get("department") or department or "Computer Science",
                     "table": "faculty",
                     "createdAt": inserted.get("created_at") or datetime.now(timezone.utc).isoformat()
                 }
@@ -615,18 +830,313 @@ class DatabaseService:
             raise RuntimeError(f"Failed to save account to Supabase: {safe_msg}")
 
     # ==========================================
-    # Activities API
+    # Courses, Materials & Announcements (Course Hub)
     # ==========================================
-    def get_activities(self) -> List[Dict[str, Any]]:
-        """Fetch all course activities."""
-        if self._ensure_connection() and self.client:
+    def get_courses(self) -> List[Dict[str, Any]]:
+        """Fetch courses from public.courses."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
-                res = self.client.table("activities").select("*").order("id").execute()
+                res = self.client.table("courses").select("*").order("id").execute()
                 if res.data is not None:
                     return res.data
             except Exception:
                 pass
-        return self._get_mock_data().get("activities", [])
+        return self._get_mock_data().get("courses", [
+            {"id": 1, "course_name": "Data Structures & Algorithms", "course_code": "CS-301"}
+        ])
+
+    def get_course_materials(self, course_code: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetch study materials uploaded or linked by faculty."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                query = self.client.table("course_materials").select("*")
+                if course_code:
+                    query = query.eq("course_code", course_code)
+                res = query.order("created_at", desc=True).execute()
+                if res.data is not None:
+                    return [
+                        {
+                            **m,
+                            "resource_type": m.get("resource_type") or m.get("material_type") or "Lecture Notes",
+                            "content_or_url": m.get("content_or_url") or m.get("description") or m.get("resource_url") or ""
+                        }
+                        for m in res.data
+                    ]
+            except Exception:
+                pass
+        materials = self._get_mock_data().get("course_materials", [])
+        if course_code:
+            materials = [m for m in materials if m.get("course_code") == course_code]
+        return [
+            {
+                **m,
+                "resource_type": m.get("resource_type") or m.get("material_type") or "Lecture Notes",
+                "content_or_url": m.get("content_or_url") or m.get("description") or m.get("resource_url") or ""
+            }
+            for m in materials
+        ]
+
+    def create_course_material(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist a new study material in Supabase."""
+        mat_type = (data.get("material_type") or data.get("resource_type") or "Lecture Notes").strip()
+        desc_or_url = (data.get("description") or data.get("content_or_url") or data.get("resource_url") or "").strip()
+        payload = {
+            "title": (data.get("title") or "").strip(),
+            "topic": (data.get("topic") or "General").strip(),
+            "material_type": mat_type,
+            "resource_url": (data.get("resource_url") or "").strip() or None,
+            "description": desc_or_url or None,
+            "course_code": (data.get("course_code") or "CS-301").strip(),
+            "uploaded_by": (data.get("uploaded_by") or "Faculty").strip()
+        }
+        if not payload["title"]:
+            raise ValueError("Study material 'title' is required.")
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            res = self.client.table("course_materials").insert(payload).execute()
+            if res.data and len(res.data) > 0:
+                row = res.data[0]
+                return {
+                    **row,
+                    "resource_type": row.get("material_type") or mat_type,
+                    "content_or_url": row.get("description") or row.get("resource_url") or desc_or_url
+                }
+
+        items = self._get_mock_data().setdefault("course_materials", [])
+        new_id = max([int(i.get("id", 0)) for i in items] + [0]) + 1
+        record = {
+            "id": new_id,
+            **payload,
+            "resource_type": mat_type,
+            "content_or_url": desc_or_url,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        items.insert(0, record)
+        return record
+
+    def get_announcements(self, course_code: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Fetch course announcements published by faculty."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                query = self.client.table("announcements").select("*")
+                if course_code:
+                    query = query.eq("course_code", course_code)
+                res = query.order("created_at", desc=True).execute()
+                if res.data is not None:
+                    return [
+                        {
+                            **a,
+                            "message": a.get("message") or a.get("content") or "",
+                            "published_by": a.get("published_by") or a.get("author_name") or "Faculty"
+                        }
+                        for a in res.data
+                    ]
+            except Exception:
+                pass
+        announcements = self._get_mock_data().get("announcements", [])
+        if course_code:
+            announcements = [a for a in announcements if a.get("course_code") == course_code]
+        return [
+            {
+                **a,
+                "message": a.get("message") or a.get("content") or "",
+                "published_by": a.get("published_by") or a.get("author_name") or "Faculty"
+            }
+            for a in announcements
+        ]
+
+    def create_announcement(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Publish and persist a new course announcement in Supabase."""
+        content_text = (data.get("content") or data.get("message") or "").strip()
+        author_text = (data.get("author_name") or data.get("published_by") or "Faculty").strip()
+        payload = {
+            "title": (data.get("title") or "").strip(),
+            "content": content_text,
+            "course_code": (data.get("course_code") or "CS-301").strip(),
+            "author_name": author_text,
+            "priority": (data.get("priority") or "normal").strip()
+        }
+        if not payload["title"] or not payload["content"]:
+            raise ValueError("Announcement 'title' and 'content' (or 'message') are required.")
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            res = self.client.table("announcements").insert(payload).execute()
+            if res.data and len(res.data) > 0:
+                row = res.data[0]
+                return {
+                    **row,
+                    "message": row.get("content") or content_text,
+                    "published_by": row.get("author_name") or author_text
+                }
+
+        items = self._get_mock_data().setdefault("announcements", [])
+        new_id = max([int(i.get("id", 0)) for i in items] + [0]) + 1
+        record = {
+            "id": new_id,
+            **payload,
+            "message": content_text,
+            "published_by": author_text,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        items.insert(0, record)
+        return record
+
+    # ==========================================
+    # Faculty–Student Collaboration & Interventions
+    # ==========================================
+    def get_interventions(
+        self,
+        student_id: Optional[Any] = None,
+        course_code: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch faculty feedback, targeted practice notices, and 1-to-1 intervention requests."""
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                query = self.client.table("interventions").select("*")
+                if student_id is not None:
+                    query = query.eq("student_id", int(student_id))
+                if course_code:
+                    query = query.eq("course_code", course_code)
+                res = query.order("created_at", desc=True).execute()
+                if res.data is not None:
+                    return [
+                        {
+                            **i,
+                            "details": i.get("details") or i.get("message") or ""
+                        }
+                        for i in res.data
+                    ]
+            except Exception:
+                pass
+
+        items = self._get_mock_data().get("interventions", [])
+        if student_id is not None:
+            items = [i for i in items if str(i.get("student_id")) == str(student_id)]
+        if course_code:
+            items = [i for i in items if i.get("course_code") == course_code]
+        return [
+            {
+                **i,
+                "details": i.get("details") or i.get("message") or ""
+            }
+            for i in items
+        ]
+
+    def create_intervention(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Creates a collaboration record in public.interventions:
+        - Faculty feedback / targeted practice assignment ('faculty_feedback', 'targeted_practice')
+        - Student 1-to-1 help request / office-hours booking ('help_request', 'office_hours')
+        """
+        student_id = data.get("student_id")
+        if student_id is None:
+            raise ValueError("'student_id' is required.")
+
+        student = self.get_student_by_id(student_id)
+        if not student:
+            raise ValueError(f"Student ID '{student_id}' not found.")
+
+        msg_text = (data.get("message") or data.get("details") or "").strip()
+        payload = {
+            "student_id": int(student["id"]),
+            "student_name": (data.get("student_name") or student.get("name") or "Student").strip(),
+            "faculty_name": (data.get("faculty_name") or "Course Faculty").strip(),
+            "course_code": (data.get("course_code") or "CS-301").strip(),
+            "topic": (data.get("topic") or "General").strip(),
+            "intervention_type": (data.get("intervention_type") or "faculty_feedback").strip(),
+            "initiated_by": (data.get("initiated_by") or "faculty").strip(),
+            "title": (data.get("title") or "Academic Support").strip(),
+            "message": msg_text,
+            "faculty_response": (data.get("faculty_response") or "").strip() or None,
+            "preferred_slot": (data.get("preferred_slot") or "").strip() or None,
+            "status": (data.get("status") or "open").strip()
+        }
+        if not payload["message"]:
+            raise ValueError("Intervention or feedback 'message' is required.")
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            res = self.client.table("interventions").insert(payload).execute()
+            if res.data and len(res.data) > 0:
+                row = res.data[0]
+                return {**row, "details": row.get("message") or msg_text}
+
+        items = self._get_mock_data().setdefault("interventions", [])
+        new_id = max([int(i.get("id", 0)) for i in items] + [0]) + 1
+        now_iso = datetime.now(timezone.utc).isoformat()
+        record = {
+            "id": new_id,
+            **payload,
+            "details": msg_text,
+            "created_at": now_iso,
+            "updated_at": now_iso
+        }
+        items.insert(0, record)
+        return record
+
+    def update_intervention(self, intervention_id: Any, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Updates an intervention record (e.g., faculty response and office-hours status)."""
+        try:
+            numeric_id = int(intervention_id)
+        except (ValueError, TypeError):
+            numeric_id = intervention_id
+
+        patch: Dict[str, Any] = {
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        if "faculty_response" in updates and updates["faculty_response"] is not None:
+            patch["faculty_response"] = str(updates["faculty_response"]).strip()
+        if "status" in updates and updates["status"]:
+            patch["status"] = str(updates["status"]).strip()
+        if "preferred_slot" in updates and updates["preferred_slot"] is not None:
+            patch["preferred_slot"] = str(updates["preferred_slot"]).strip()
+        if "faculty_name" in updates and updates["faculty_name"]:
+            patch["faculty_name"] = str(updates["faculty_name"]).strip()
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = (
+                    self.client.table("interventions")
+                    .update(patch)
+                    .eq("id", numeric_id)
+                    .execute()
+                )
+                if res.data and len(res.data) > 0:
+                    return res.data[0]
+            except Exception:
+                pass
+
+        for item in self._get_mock_data().setdefault("interventions", []):
+            if str(item.get("id")) == str(intervention_id):
+                item.update(patch)
+                return item
+        return None
+
+    # ==========================================
+    # Activities & Assignments API
+    # ==========================================
+    def get_activities(self, student_id: Optional[Any] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch course activities. If student_id is provided, returns course-wide activities
+        plus any targeted remedial activities assigned specifically to that student.
+        """
+        all_acts: List[Dict[str, Any]] = []
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = self.client.table("activities").select("*").order("id").execute()
+                if res.data is not None:
+                    all_acts = res.data
+            except Exception:
+                all_acts = self._get_mock_data().get("activities", [])
+        else:
+            all_acts = self._get_mock_data().get("activities", [])
+
+        if student_id is not None:
+            return [
+                a for a in all_acts
+                if a.get("assigned_student_id") is None
+                or str(a.get("assigned_student_id")) == str(student_id)
+            ]
+        return all_acts
 
     def get_activity_by_id(self, activity_id: Any) -> Optional[Dict[str, Any]]:
         """Fetch single activity by ID."""
@@ -635,7 +1145,7 @@ class DatabaseService:
         except (ValueError, TypeError):
             numeric_id = activity_id
 
-        if self._ensure_connection() and self.client:
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
                 res = self.client.table("activities").select("*").eq("id", numeric_id).execute()
                 if res.data and len(res.data) > 0:
@@ -649,36 +1159,54 @@ class DatabaseService:
         return None
 
     def create_activity(self, activity_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new activity. Writes to Supabase or appends to mock dataset."""
-        payload = {
+        """Create a new course activity or targeted student exercise in Supabase."""
+        base_payload = {
             "title": activity_data["title"],
             "topic": activity_data["topic"],
             "activity_type": activity_data.get("activity_type", "Quiz"),
             "max_score": float(activity_data.get("max_score", 100))
         }
+        extended_payload = {
+            **base_payload,
+            "instructions": (activity_data.get("instructions") or "").strip() or None,
+            "due_date": (activity_data.get("due_date") or "").strip() or None,
+            "assigned_student_id": int(activity_data["assigned_student_id"]) if activity_data.get("assigned_student_id") else None,
+            "course_code": (activity_data.get("course_code") or "CS-301").strip(),
+            "created_by_faculty": (activity_data.get("created_by_faculty") or "").strip() or None
+        }
 
         if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
-                res = self.client.table("activities").insert(payload).execute()
+                res = self.client.table("activities").insert(extended_payload).execute()
                 if res.data and len(res.data) > 0:
                     return res.data[0]
             except Exception:
-                pass
+                try:
+                    res = self.client.table("activities").insert(base_payload).execute()
+                    if res.data and len(res.data) > 0:
+                        return res.data[0]
+                except Exception:
+                    pass
 
-        # In-memory mock fallback
-        mock_id = len(self._get_mock_data().get("activities", [])) + 1
-        new_record = {"id": mock_id, **payload}
-        self._get_mock_data().setdefault("activities", []).append(new_record)
+        activities_list = self._get_mock_data().setdefault("activities", [])
+        mock_id = max([int(a.get("id", 0)) for a in activities_list] + [0]) + 1
+        new_record = {
+            "id": mock_id,
+            **extended_payload,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        activities_list.append(new_record)
         return new_record
 
     # ==========================================
-    # Submissions API
+    # Submissions & Evaluation Queue API
     # ==========================================
     def get_submissions(self, student_id: Optional[Any] = None) -> List[Dict[str, Any]]:
-        """Fetch submissions, optionally filtered by student_id with activity details."""
-        if self._ensure_connection() and self.client:
+        """Fetch submissions joined with activity and student details."""
+        students_map = {str(s.get("id")): s.get("name", f"Student #{s.get('id')}") for s in self.get_students()}
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
-                # Query submissions joined with activities
                 query = self.client.table("submissions").select("*, activities(*)")
                 if student_id is not None:
                     try:
@@ -688,19 +1216,25 @@ class DatabaseService:
                     query = query.eq("student_id", numeric_id)
                 res = query.order("submitted_at", desc=True).execute()
 
-                # Normalize join format
                 submissions = []
                 for sub in res.data or []:
                     act = sub.get("activities") or {}
+                    sid = sub.get("student_id")
                     submissions.append({
                         "id": sub.get("id"),
-                        "student_id": sub.get("student_id"),
+                        "student_id": sid,
+                        "student_name": students_map.get(str(sid), f"Student #{sid}"),
                         "activity_id": sub.get("activity_id"),
                         "score": float(sub.get("score", 0)),
                         "status": sub.get("status", "submitted"),
                         "is_late": sub.get("status") == "late",
+                        "response_text": sub.get("response_text"),
+                        "feedback": sub.get("feedback"),
+                        "evaluated_by": sub.get("evaluated_by"),
+                        "evaluated_at": sub.get("evaluated_at"),
                         "submitted_at": sub.get("submitted_at"),
                         "activity_title": act.get("title", f"Activity {sub.get('activity_id')}"),
+                        "activity_type": act.get("activity_type", "Assignment"),
                         "topic": act.get("topic", "General"),
                         "max_score": float(act.get("max_score", 100))
                     })
@@ -708,7 +1242,6 @@ class DatabaseService:
             except Exception:
                 pass
 
-        # Fallback to mock data with join
         raw_submissions = self._get_mock_data().get("submissions", [])
         activities_map = {a["id"]: a for a in self._get_mock_data().get("activities", [])}
 
@@ -717,48 +1250,109 @@ class DatabaseService:
             if student_id is not None and str(sub.get("student_id")) != str(student_id):
                 continue
             act = activities_map.get(sub.get("activity_id"), {})
+            sid = sub.get("student_id")
             normalized.append({
                 "id": sub.get("id"),
-                "student_id": sub.get("student_id"),
+                "student_id": sid,
+                "student_name": students_map.get(str(sid), f"Student #{sid}"),
                 "activity_id": sub.get("activity_id"),
                 "score": float(sub.get("score", 0)),
                 "status": sub.get("status", "submitted"),
                 "is_late": sub.get("status") == "late",
+                "response_text": sub.get("response_text"),
+                "feedback": sub.get("feedback"),
+                "evaluated_by": sub.get("evaluated_by"),
+                "evaluated_at": sub.get("evaluated_at"),
                 "submitted_at": sub.get("submitted_at"),
                 "activity_title": act.get("title", f"Activity {sub.get('activity_id')}"),
+                "activity_type": act.get("activity_type", "Assignment"),
                 "topic": act.get("topic", "General"),
                 "max_score": float(act.get("max_score", 100))
             })
         return normalized
 
     def create_submission(self, submission_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Record a student submission. Writes to Supabase or appends to mock dataset."""
+        """Record a student submission (score or assignment response) in Supabase."""
         status = "late" if submission_data.get("is_late") else submission_data.get("status", "submitted")
 
-        payload = {
+        base_payload = {
             "student_id": int(submission_data["student_id"]),
             "activity_id": int(submission_data["activity_id"]),
-            "score": float(submission_data["score"]),
+            "score": float(submission_data.get("score", 0)),
             "status": status
+        }
+        extended_payload = {
+            **base_payload,
+            "response_text": (submission_data.get("response_text") or "").strip() or None,
+            "feedback": (submission_data.get("feedback") or "").strip() or None
         }
 
         if self._ensure_connection() and self.client and not self._is_testing_mode():
             try:
-                res = self.client.table("submissions").insert(payload).execute()
+                res = self.client.table("submissions").insert(extended_payload).execute()
+                if res.data and len(res.data) > 0:
+                    return res.data[0]
+            except Exception:
+                try:
+                    res = self.client.table("submissions").insert(base_payload).execute()
+                    if res.data and len(res.data) > 0:
+                        return res.data[0]
+                except Exception:
+                    pass
+
+        subs_list = self._get_mock_data().setdefault("submissions", [])
+        mock_id = max([int(s.get("id", 0)) for s in subs_list] + [0]) + 1
+        new_record = {
+            "id": mock_id,
+            **extended_payload,
+            "submitted_at": datetime.now(timezone.utc).isoformat()
+        }
+        subs_list.append(new_record)
+        return new_record
+
+    def evaluate_submission(
+        self,
+        submission_id: Any,
+        score: float,
+        feedback: str,
+        evaluated_by: str = "Faculty"
+    ) -> Optional[Dict[str, Any]]:
+        """Allows faculty to evaluate a student submission with marks and written feedback."""
+        try:
+            numeric_id = int(submission_id)
+        except (ValueError, TypeError):
+            numeric_id = submission_id
+
+        numeric_score = float(score)
+        if numeric_score < 0 or numeric_score > 100:
+            raise ValueError("Score must be between 0 and 100.")
+
+        patch = {
+            "score": numeric_score,
+            "feedback": (feedback or "").strip(),
+            "evaluated_by": (evaluated_by or "Faculty").strip(),
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "evaluated"
+        }
+
+        if self._ensure_connection() and self.client and not self._is_testing_mode():
+            try:
+                res = (
+                    self.client.table("submissions")
+                    .update(patch)
+                    .eq("id", numeric_id)
+                    .execute()
+                )
                 if res.data and len(res.data) > 0:
                     return res.data[0]
             except Exception:
                 pass
 
-        # In-memory mock fallback
-        mock_id = len(self._get_mock_data().get("submissions", [])) + 1
-        new_record = {
-            "id": mock_id,
-            **payload,
-            "submitted_at": datetime.now(timezone.utc).isoformat()
-        }
-        self._get_mock_data().setdefault("submissions", []).append(new_record)
-        return new_record
+        for sub in self._get_mock_data().setdefault("submissions", []):
+            if str(sub.get("id")) == str(submission_id):
+                sub.update(patch)
+                return sub
+        return None
 
 
 # Singleton instance

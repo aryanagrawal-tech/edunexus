@@ -14,6 +14,10 @@ const EduNexusCharts = {
     if (!container) return;
 
     container.innerHTML = '';
+    if (!Array.isArray(topics) || topics.length === 0) {
+      container.innerHTML = '<div class="empty-state-box">No assessment data available</div>';
+      return;
+    }
     const listWrap = document.createElement('div');
     listWrap.className = 'mastery-list';
 
@@ -114,6 +118,11 @@ const EduNexusCharts = {
   renderComparativeBarChart(containerId, data) {
     const container = document.getElementById(containerId);
     if (!container) return;
+
+    if (!Array.isArray(data) || data.length === 0) {
+      container.innerHTML = '<div class="empty-state-box">No assessment data available</div>';
+      return;
+    }
 
     const width = 500;
     const height = 240;

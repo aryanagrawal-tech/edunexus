@@ -132,3 +132,46 @@ def test_analyze_faculty_cohort():
     assert cohort["at_risk_count"] >= 1
     assert len(cohort["at_risk_students"]) >= 1
     assert all("suggested_intervention" in s for s in cohort["at_risk_students"])
+
+
+def test_analyze_faculty_cohort_excludes_zero_submission_students_from_at_risk():
+    """Newly registered students with 0 submissions must not be fabricated as High Risk."""
+    students = [
+        {"id": 1, "name": "Graded Student"},
+        {"id": 2, "name": "Brand New Student"}
+    ]
+    all_submissions = [
+        {"student_id": 1, "topic": "Arrays", "score": 88}
+    ]
+    cohort = analyze_faculty_cohort(students, all_submissions)
+    assert cohort["enrolled_count"] == 2
+    assert cohort["at_risk_count"] == 0
+    assert cohort["at_risk_students"] == []
+
+
+def test_generate_explainable_faculty_insights():
+    from services.analytics import generate_explainable_faculty_insights
+
+    # Insufficient data case
+    empty_res = generate_explainable_faculty_insights([], [])
+    assert empty_res["has_sufficient_data"] is False
+    assert empty_res["insights"] == []
+    assert "Insufficient assessment data" in empty_res["message"]
+
+    # Real data with low scores
+    students = [{"id": 1, "name": "Student 1"}, {"id": 2, "name": "Student 2"}]
+    submissions = [
+        {"student_id": 1, "activity_id": 10, "activity_title": "DP Quiz 1", "topic": "Dynamic Programming", "score": 42, "status": "submitted"},
+        {"student_id": 2, "activity_id": 10, "activity_title": "DP Quiz 1", "topic": "Dynamic Programming", "score": 48, "status": "late"},
+        {"student_id": 1, "activity_id": 11, "activity_title": "Arrays Lab", "topic": "Arrays", "score": 90, "status": "submitted"},
+    ]
+    res = generate_explainable_faculty_insights(students, submissions)
+    assert res["has_sufficient_data"] is True
+    assert len(res["insights"]) >= 1
+    dp_insight = next(i for i in res["insights"] if i["topic"] == "Dynamic Programming")
+    assert dp_insight["average_score"] == 45.0
+    assert dp_insight["below_threshold_count"] == 2
+    assert any("Module average score: 45.0%" in ev for ev in dp_insight["evidence"])
+    assert "recommended_action" in dp_insight
+    assert "action_type" in dp_insight
+

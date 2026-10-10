@@ -22,6 +22,7 @@ from services.analytics import (
     detect_weak_topics,
     analyze_student_performance,
     analyze_faculty_cohort,
+    generate_explainable_faculty_insights,
     ALLOWED_TOPICS
 )
 from services.recommendations import generate_recommendations
@@ -69,11 +70,26 @@ def get_students():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/faculty", methods=["GET"])
+def get_faculty():
+    """Retrieves list of all registered faculty members."""
+    try:
+        faculty = db_service.get_faculty()
+        return jsonify({
+            "success": True,
+            "count": len(faculty),
+            "data": faculty
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/activities", methods=["GET"])
 def get_activities():
-    """Retrieves all course activities and curriculum modules."""
+    """Retrieves course activities and curriculum modules (optionally filtered for a student)."""
     try:
-        activities = db_service.get_activities()
+        student_id = request.args.get("student_id")
+        activities = db_service.get_activities(student_id=student_id)
         return jsonify({
             "success": True,
             "count": len(activities),
@@ -85,12 +101,21 @@ def get_activities():
 
 @app.route("/api/activities", methods=["POST"])
 def create_activity():
-    """Creates a new course activity."""
+    """Creates a new course activity or targeted student exercise."""
     payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "").strip().lower()
+    if role == "student":
+        return jsonify({"success": False, "error": "Students are not authorized to create course assessments."}), 403
+
     title = payload.get("title", "").strip()
     topic = payload.get("topic", "").strip()
     activity_type = payload.get("activity_type", "Quiz").strip()
     max_score = payload.get("max_score", 100)
+    instructions = (payload.get("instructions") or "").strip()
+    due_date = (payload.get("due_date") or "").strip()
+    assigned_student_id = payload.get("assigned_student_id")
+    course_code = (payload.get("course_code") or "CS-301").strip()
+    created_by_faculty = (payload.get("created_by_faculty") or "Course Faculty").strip()
 
     # Validation
     if not title:
@@ -107,20 +132,51 @@ def create_activity():
     except (ValueError, TypeError):
         return jsonify({"success": False, "error": "'max_score' must be a positive number."}), 400
 
+    if assigned_student_id is not None and str(assigned_student_id).strip() != "":
+        target_student = db_service.get_student_by_id(assigned_student_id)
+        if not target_student:
+            return jsonify({"success": False, "error": f"Target student ID '{assigned_student_id}' not found."}), 404
+        assigned_student_id = target_student["id"]
+    else:
+        assigned_student_id = None
+
     try:
         new_activity = db_service.create_activity({
             "title": title,
             "topic": topic,
             "activity_type": activity_type,
-            "max_score": max_score
+            "max_score": max_score,
+            "instructions": instructions,
+            "due_date": due_date,
+            "assigned_student_id": assigned_student_id,
+            "course_code": course_code,
+            "created_by_faculty": created_by_faculty
         })
+
+        # If assigned to a specific student, also record a collaboration notification
+        if assigned_student_id is not None:
+            try:
+                db_service.create_intervention({
+                    "student_id": assigned_student_id,
+                    "faculty_name": created_by_faculty,
+                    "course_code": course_code,
+                    "topic": topic,
+                    "intervention_type": "targeted_practice",
+                    "initiated_by": "faculty",
+                    "title": f"Assigned {activity_type}: {title}",
+                    "message": instructions or f"Please complete '{title}' ({topic}) to strengthen your mastery.",
+                    "status": "Assigned"
+                })
+            except Exception:
+                pass
+
         return jsonify({
             "success": True,
             "message": "Activity created successfully.",
             "data": new_activity
         }), 201
-    except RuntimeError as re:
-        return jsonify({"success": False, "error": str(re)}), 503
+    except RuntimeError as re_err:
+        return jsonify({"success": False, "error": str(re_err)}), 503
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -129,10 +185,18 @@ def create_activity():
 def get_student_dashboard(student_id):
     """
     Retrieves full academic dashboard for a specific student:
-    Overall score, topic mastery, weak-topic detection, and personalized recommendations.
+    Real profile, overall score, topic mastery, weak-topic detection,
+    personalized recommendations, assigned activities, submissions, and faculty collaboration items.
     """
     try:
         student = db_service.get_student_by_id(student_id)
+        if not student:
+            email_param = (request.args.get("email") or "").strip().lower()
+            if email_param:
+                user_lookup = db_service.get_user_by_email(email_param)
+                if user_lookup and user_lookup.get("role") == "student":
+                    student = db_service.get_student_by_id(user_lookup.get("id"))
+
         if not student:
             return jsonify({
                 "success": False,
@@ -140,25 +204,45 @@ def get_student_dashboard(student_id):
             }), 404
 
         submissions = db_service.get_submissions(student_id=student["id"])
-        performance = analyze_student_performance(student, submissions)
-        recommendations = generate_recommendations(performance["weak_topics"])
+        assigned_activities = db_service.get_activities(student_id=student["id"])
+        performance = analyze_student_performance(
+            student,
+            submissions,
+            total_assigned_activities=len(assigned_activities) or 6
+        )
+        recommendations = generate_recommendations(performance["weak_topics"]) if submissions else []
+        interventions = db_service.get_interventions(student_id=student["id"])
+        courses = db_service.get_courses()
+        materials = db_service.get_course_materials()
+        announcements = db_service.get_announcements()
 
         response_data = {
             "profile": {
                 "id": student["id"],
                 "name": student["name"],
                 "email": student.get("email"),
-                "course": "Data Structures"
+                "course": student.get("course") or "Data Structures",
+                "status": student.get("status") or "Active",
+                "created_at": student.get("created_at")
             },
             "metrics": {
                 "overall_score": performance["overall_score"],
                 "completion_rate": performance["completion_rate"],
-                "total_submissions": performance["total_submissions"]
+                "total_submissions": performance["total_submissions"],
+                "total_assigned_activities": len(assigned_activities),
+                "has_assessment_data": len(submissions) > 0
             },
-            "topic_scores": performance["topic_scores"],
+            "topic_scores": performance["topic_scores"] if submissions else [],
             "weak_topics": performance["weak_topics"],
             "recommendations": recommendations,
-            "recent_submissions": submissions[:5]
+            "recent_submissions": submissions,
+            "assigned_activities": assigned_activities,
+            "interventions": interventions,
+            "course_hub": {
+                "courses": courses,
+                "materials": materials,
+                "announcements": announcements
+            }
         }
 
         return jsonify({
@@ -172,14 +256,35 @@ def get_student_dashboard(student_id):
 @app.route("/api/faculty/overview", methods=["GET"])
 def get_faculty_overview():
     """
-    Retrieves course overview for faculty:
-    Class average, topic mastery distribution, and at-risk students needing support.
+    Retrieves real course overview for faculty:
+    Class average, topic mastery distribution, at-risk students needing support,
+    explainable AI insights, evaluation queue, interventions, and course hub data.
     """
     try:
         students = db_service.get_students()
         all_submissions = db_service.get_submissions()
+        activities = db_service.get_activities()
+        courses = db_service.get_courses()
+        materials = db_service.get_course_materials()
+        announcements = db_service.get_announcements()
+        interventions = db_service.get_interventions()
+        faculty_list = db_service.get_faculty()
 
-        cohort_metrics = analyze_faculty_cohort(students, all_submissions)
+        cohort_metrics = analyze_faculty_cohort(students, all_submissions, activities=activities)
+        cohort_metrics["courses"] = courses
+        cohort_metrics["activities"] = activities
+        cohort_metrics["submissions_queue"] = all_submissions
+        cohort_metrics["interventions"] = interventions
+        cohort_metrics["students_roster"] = [
+            {"id": s["id"], "name": s["name"], "email": s.get("email")}
+            for s in students
+        ]
+        cohort_metrics["faculty_roster"] = faculty_list
+        cohort_metrics["course_hub"] = {
+            "courses": courses,
+            "materials": materials,
+            "announcements": announcements
+        }
 
         return jsonify({
             "success": True,
@@ -189,38 +294,56 @@ def get_faculty_overview():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@app.route("/api/submissions", methods=["GET"])
+def list_submissions():
+    """Retrieves submissions, optionally filtered by student_id."""
+    try:
+        student_id = request.args.get("student_id")
+        subs = db_service.get_submissions(student_id=student_id)
+        return jsonify({
+            "success": True,
+            "count": len(subs),
+            "data": subs
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/submissions", methods=["POST"])
 def submit_activity():
-    """Records a student submission with score and completion status."""
+    """Records a student submission with score or assignment response text."""
     payload = request.get_json(silent=True) or {}
     student_id = payload.get("student_id")
     activity_id = payload.get("activity_id")
     score = payload.get("score")
+    response_text = (payload.get("response_text") or "").strip()
     is_late = bool(payload.get("is_late", False))
 
-    if student_id is None or activity_id is None or score is None:
+    if student_id is None or activity_id is None or (score is None and not response_text):
         return jsonify({
             "success": False,
             "error": "Missing required fields: 'student_id', 'activity_id', and 'score' are required."
         }), 400
 
-    # Validate score range
-    try:
-        numeric_score = float(score)
-        if numeric_score < 0 or numeric_score > 100:
-            return jsonify({
-                "success": False,
-                "error": "Score must be a number between 0 and 100."
-            }), 400
-    except (ValueError, TypeError):
-        return jsonify({"success": False, "error": "Score must be a valid numeric value."}), 400
+    if score is not None and str(score).strip() != "":
+        try:
+            numeric_score = float(score)
+            if numeric_score < 0 or numeric_score > 100:
+                return jsonify({
+                    "success": False,
+                    "error": "Score must be a number between 0 and 100."
+                }), 400
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": "Score must be a valid numeric value."}), 400
+        default_status = "late" if is_late else (payload.get("status") or "submitted")
+    else:
+        numeric_score = 0.0
+        default_status = "pending_review"
 
-    # Verify student exists
     student = db_service.get_student_by_id(student_id)
     if not student:
         return jsonify({"success": False, "error": f"Student ID '{student_id}' does not exist."}), 404
 
-    # Verify activity exists
     activity = db_service.get_activity_by_id(activity_id)
     if not activity:
         return jsonify({"success": False, "error": f"Activity ID '{activity_id}' does not exist."}), 404
@@ -230,15 +353,301 @@ def submit_activity():
             "student_id": student["id"],
             "activity_id": activity["id"],
             "score": numeric_score,
-            "is_late": is_late
+            "is_late": is_late,
+            "status": default_status,
+            "response_text": response_text
         })
         return jsonify({
             "success": True,
             "message": "Submission recorded successfully.",
             "data": new_submission
         }), 201
-    except RuntimeError as re:
-        return jsonify({"success": False, "error": str(re)}), 503
+    except RuntimeError as re_err:
+        return jsonify({"success": False, "error": str(re_err)}), 503
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/submissions/<submission_id>/evaluate", methods=["POST", "PUT", "PATCH"])
+def evaluate_submission_route(submission_id):
+    """
+    Allows faculty to evaluate a student submission with marks and feedback.
+    Enforces role-based authorization: students cannot modify faculty evaluation records.
+    """
+    payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "faculty").strip().lower()
+    if role == "student":
+        return jsonify({
+            "success": False,
+            "error": "Unauthorized: Students cannot modify faculty evaluation records."
+        }), 403
+
+    score = payload.get("score")
+    feedback = (payload.get("feedback") or "").strip()
+    evaluated_by = (payload.get("evaluated_by") or "Course Faculty").strip()
+
+    if score is None:
+        return jsonify({"success": False, "error": "'score' is required to evaluate a submission."}), 400
+
+    try:
+        numeric_score = float(score)
+        if numeric_score < 0 or numeric_score > 100:
+            return jsonify({"success": False, "error": "Score must be between 0 and 100."}), 400
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "Score must be a valid number."}), 400
+
+    try:
+        updated = db_service.evaluate_submission(
+            submission_id=submission_id,
+            score=numeric_score,
+            feedback=feedback,
+            evaluated_by=evaluated_by
+        )
+        if not updated:
+            return jsonify({"success": False, "error": f"Submission '{submission_id}' not found."}), 404
+        return jsonify({
+            "success": True,
+            "message": "Submission evaluated and saved to database.",
+            "data": updated
+        }), 200
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ==========================================
+# Priority 3: Faculty–Student Collaboration & Interventions
+# ==========================================
+
+@app.route("/api/interventions", methods=["GET"])
+def list_interventions():
+    """Retrieves faculty feedback, assigned support actions, and student 1-to-1 help requests."""
+    try:
+        student_id = request.args.get("student_id")
+        course_code = request.args.get("course_code")
+        items = db_service.get_interventions(student_id=student_id, course_code=course_code)
+        return jsonify({
+            "success": True,
+            "count": len(items),
+            "data": items
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/interventions", methods=["POST"])
+def create_intervention_route():
+    """
+    Creates a new faculty-student collaboration entry or 1-to-1 intervention request:
+    - Faculty sending feedback or assigning targeted practice to a specific student
+    - Student requesting 1-to-1 help or office hours for a course/weak topic
+    """
+    payload = request.get_json(silent=True) or {}
+    student_id = payload.get("student_id")
+    message = (payload.get("message") or payload.get("details") or "").strip()
+
+    if student_id is None or not message:
+        return jsonify({
+            "success": False,
+            "error": "'student_id' and 'message' (or 'details') are required."
+        }), 400
+
+    try:
+        created = db_service.create_intervention(payload)
+        return jsonify({
+            "success": True,
+            "message": "Collaboration record saved to database.",
+            "data": created
+        }), 201
+    except ValueError as ve:
+        status_code = 404 if "not found" in str(ve).lower() else 400
+        return jsonify({"success": False, "error": str(ve)}), status_code
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/interventions/<intervention_id>/respond", methods=["POST", "PATCH", "PUT"])
+def respond_intervention_route(intervention_id):
+    """Allows faculty to respond to a student help request or update office-hours booking status."""
+    payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "faculty").strip().lower()
+    if role == "student" and "faculty_response" in payload:
+        return jsonify({
+            "success": False,
+            "error": "Unauthorized: Students cannot author faculty intervention responses."
+        }), 403
+
+    try:
+        updated = db_service.update_intervention(intervention_id, payload)
+        if not updated:
+            return jsonify({"success": False, "error": f"Intervention '{intervention_id}' not found."}), 404
+        return jsonify({
+            "success": True,
+            "message": "Intervention updated in database.",
+            "data": updated
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ==========================================
+# Priority 4: Unified Course Hub Endpoints
+# ==========================================
+
+@app.route("/api/course-hub", methods=["GET"])
+def get_course_hub():
+    """Returns courses, faculty study materials, announcements, and assignments."""
+    try:
+        course_code = request.args.get("course_code")
+        student_id = request.args.get("student_id")
+        courses = db_service.get_courses()
+        materials = db_service.get_course_materials(course_code=course_code)
+        announcements = db_service.get_announcements(course_code=course_code)
+        activities = db_service.get_activities(student_id=student_id)
+        return jsonify({
+            "success": True,
+            "data": {
+                "courses": courses,
+                "materials": materials,
+                "announcements": announcements,
+                "activities": activities
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/course-materials", methods=["GET"])
+def list_course_materials():
+    try:
+        course_code = request.args.get("course_code")
+        materials = db_service.get_course_materials(course_code=course_code)
+        return jsonify({"success": True, "count": len(materials), "data": materials}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/course-materials", methods=["POST"])
+def create_course_material_route():
+    payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "faculty").strip().lower()
+    if role == "student":
+        return jsonify({"success": False, "error": "Unauthorized: Only faculty can upload course materials."}), 403
+
+    try:
+        created = db_service.create_course_material(payload)
+        return jsonify({
+            "success": True,
+            "message": "Study material published to Course Hub.",
+            "data": created
+        }), 201
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/announcements", methods=["GET"])
+def list_announcements():
+    try:
+        course_code = request.args.get("course_code")
+        announcements = db_service.get_announcements(course_code=course_code)
+        return jsonify({"success": True, "count": len(announcements), "data": announcements}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/announcements", methods=["POST"])
+def create_announcement_route():
+    payload = request.get_json(silent=True) or {}
+    role = (payload.get("role") or "faculty").strip().lower()
+    if role == "student":
+        return jsonify({"success": False, "error": "Unauthorized: Only faculty can publish course announcements."}), 403
+
+    try:
+        created = db_service.create_announcement(payload)
+        return jsonify({
+            "success": True,
+            "message": "Course announcement published.",
+            "data": created
+        }), 201
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ==========================================
+# Priority 2: Real Admin Console Endpoints
+# ==========================================
+
+@app.route("/api/admin/overview", methods=["GET"])
+def get_admin_overview():
+    """
+    Returns real database-backed platform governance metrics and registered user directory.
+    Never fabricates user counts or fake accounts.
+    """
+    try:
+        users = db_service.get_all_users()
+        students = [u for u in users if u["role"] == "Student"]
+        faculty = [u for u in users if u["role"] == "Faculty"]
+        admins = [u for u in users if u["role"] == "Admin"]
+        active_users = [u for u in users if u.get("status") == "Active"]
+        suspended_users = [u for u in users if u.get("status") != "Active"]
+
+        courses = db_service.get_courses()
+        activities = db_service.get_activities()
+        submissions = db_service.get_submissions()
+        interventions = db_service.get_interventions()
+        announcements = db_service.get_announcements()
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "metrics": {
+                    "total_users": len(users),
+                    "students_count": len(students),
+                    "faculty_count": len(faculty),
+                    "admins_count": len(admins),
+                    "active_users_count": len(active_users),
+                    "suspended_users_count": len(suspended_users),
+                    "courses_count": len(courses),
+                    "activities_count": len(activities),
+                    "submissions_count": len(submissions),
+                    "interventions_count": len(interventions),
+                    "announcements_count": len(announcements),
+                    "database_connected": db_service.is_connected
+                },
+                "users": users
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/admin/users/status", methods=["POST", "PATCH", "PUT"])
+def update_admin_user_status():
+    """Allows administrators to toggle a user's account status (Active / Suspended) in Supabase."""
+    payload = request.get_json(silent=True) or {}
+    role = payload.get("role")
+    record_id = payload.get("record_id")
+    status = payload.get("status")
+
+    if not role or record_id is None or not status:
+        return jsonify({"success": False, "error": "'role', 'record_id', and 'status' are required."}), 400
+
+    try:
+        updated = db_service.update_user_status(role=role, record_id=record_id, status=status)
+        if not updated:
+            return jsonify({"success": False, "error": "User record not found."}), 404
+        return jsonify({
+            "success": True,
+            "message": f"Account status updated to {status}.",
+            "data": updated
+        }), 200
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -325,7 +734,6 @@ def study_assistant_chat():
     if previous_interaction_id is not None and not isinstance(previous_interaction_id, str):
         previous_interaction_id = None
 
-    # Attach verified student performance context if provided or look up by student_id
     student_context = payload.get("student_context") if isinstance(payload.get("student_context"), dict) else None
     student_id = payload.get("student_id")
     if student_context is None and student_id is not None:
@@ -338,7 +746,7 @@ def study_assistant_chat():
                     "profile": {
                         "id": student["id"],
                         "name": student["name"],
-                        "course": "Data Structures",
+                        "course": student.get("course") or "Data Structures",
                     },
                     "metrics": {
                         "overall_score": perf["overall_score"],
@@ -384,7 +792,6 @@ def study_assistant_chat():
 
 # ==========================================
 # Frontend Authentication API Compatibility
-# Compatible with docs/api.md & static/js/api.js
 # ==========================================
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
@@ -401,14 +808,15 @@ def auth_login():
     if not email or not password:
         return jsonify({"success": False, "message": "Missing email or password."}), 400
 
-    # Verify stored password hash if registered during session
+    # Check if user exists in Supabase students / faculty / admins tables
+    existing_user = db_service.get_user_by_email(email)
     stored_hash = db_service.get_password_hash(email)
     if stored_hash and not check_password_hash(stored_hash, password):
         return jsonify({"success": False, "message": "Invalid email or password."}), 401
 
-    # Check if user exists in Supabase students / faculty tables
-    existing_user = db_service.get_user_by_email(email)
     if existing_user:
+        if str(existing_user.get("status", "Active")).lower() == "suspended":
+            return jsonify({"success": False, "message": "This account has been suspended by an administrator."}), 403
         role = existing_user.get("role", "student")
         user_data = {
             "id": existing_user.get("id"),
@@ -416,17 +824,21 @@ def auth_login():
             "name": existing_user.get("name") or existing_user.get("fullName"),
             "email": existing_user.get("email", email),
             "role": role,
-            "course": "Data Structures"
+            "department": existing_user.get("department") or "Computer Science",
+            "course": existing_user.get("course") or "Data Structures"
         }
     else:
         role = "faculty" if "faculty" in email else ("admin" if "admin" in email else "student")
         name = email.split("@")[0].replace(".", " ").title()
+        # Map known quick-fill demo student to ID 1 so demo testing still resolves cleanly
+        fallback_id = 1 if email == "student.demo@edunexus.edu" else f"usr_{abs(hash(email)) % 100000:05d}"
         user_data = {
-            "id": f"usr_{abs(hash(email)) % 100000:05d}",
+            "id": fallback_id,
             "fullName": name,
             "name": name,
             "email": email,
             "role": role,
+            "department": "Computer Science",
             "course": "Data Structures"
         }
 
@@ -453,6 +865,7 @@ def auth_register():
     email = (payload.get("email") or "").strip().lower()
     password = payload.get("password") or ""
     role = (payload.get("role") or "").strip().lower()
+    department = (payload.get("department") or "").strip() or None
 
     if not full_name or not email or not password or not role:
         return jsonify({"success": False, "message": "All fields are required."}), 400
@@ -487,7 +900,6 @@ def auth_register():
             "message": "Password must be at least 8 characters long."
         }), 400
 
-    # Hash password securely before passing to service layer; never store plaintext
     password_hash = generate_password_hash(password)
 
     try:
@@ -495,11 +907,12 @@ def auth_register():
             full_name=full_name,
             email=email,
             password_hash=password_hash,
-            role=role
+            role=role,
+            department=department
         )
         return jsonify({
             "success": True,
-            "message": f"Account registered and saved to database for {created_user['fullName']} as {role.upper()}.",
+            "message": "Registration successful. Please log in.",
             "data": {
                 "user": created_user
             }
@@ -530,14 +943,23 @@ def auth_register():
 @app.route("/api/auth/me", methods=["GET"])
 def auth_me():
     """Current session info."""
+    email = (request.args.get("email") or "").strip().lower()
+    if email:
+        user = db_service.get_user_by_email(email)
+        if user:
+            return jsonify({"success": True, "data": user}), 200
+
+    students = db_service.get_students()
+    first_student = students[0] if students else {"id": 1, "name": "Student", "email": ""}
     return jsonify({
         "success": True,
         "data": {
-            "id": "usr_active_session",
-            "fullName": "Aanya Patel",
-            "email": "aanya.demo@example.com",
+            "id": first_student.get("id", "usr_active_session"),
+            "fullName": first_student.get("name", "Student"),
+            "name": first_student.get("name", "Student"),
+            "email": first_student.get("email", ""),
             "role": "student",
-            "course": "Data Structures"
+            "course": first_student.get("course", "Data Structures")
         }
     }), 200
 

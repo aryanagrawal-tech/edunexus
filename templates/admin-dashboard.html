@@ -145,9 +145,9 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">1,284</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">+12%</span> this semester
+            <div class="stat-card-value" id="adminStatTotalUsers">0</div>
+            <div class="stat-card-meta" id="adminStatTotalUsersMeta">
+              Registered in Supabase PostgreSQL
             </div>
           </div>
 
@@ -161,8 +161,8 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">1,120</div>
-            <div class="stat-card-meta">87% institutional share</div>
+            <div class="stat-card-value" id="adminStatStudentsCount">0</div>
+            <div class="stat-card-meta" id="adminStatStudentsMeta">Enrolled student accounts</div>
           </div>
 
           <div class="stat-card">
@@ -175,22 +175,22 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">142</div>
-            <div class="stat-card-meta">Across 6 departments</div>
+            <div class="stat-card-value" id="adminStatFacultyCount">0</div>
+            <div class="stat-card-meta" id="adminStatFacultyMeta">Academic instructors</div>
           </div>
 
           <div class="stat-card">
             <div class="stat-card-header">
-              <span class="stat-card-label">Platform Uptime</span>
+              <span class="stat-card-label">Courses & Submissions</span>
               <div class="stat-icon-wrap stat-icon-amber" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">99.98%</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">Optimal</span> health
+            <div class="stat-card-value" id="adminStatCoursesCount">0</div>
+            <div class="stat-card-meta" id="adminStatActivityMeta">
+              Live database records
             </div>
           </div>
         </section>
@@ -201,7 +201,7 @@
             <div class="card-header">
               <div class="card-title-group">
                 <h2 id="roleSummaryTitle" class="card-title">Role Distribution Summary</h2>
-                <span class="card-subtitle">Active accounts by institutional role</span>
+                <span class="card-subtitle">Registered accounts by institutional role</span>
               </div>
             </div>
             <div class="card-body">
@@ -209,28 +209,28 @@
                 <div class="mastery-item">
                   <div class="mastery-meta">
                     <span class="mastery-title">Enrolled Students</span>
-                    <span class="mastery-score-tag mastery-tag-info">1,120 · 87.2%</span>
+                    <span class="mastery-score-tag mastery-tag-info" id="adminRoleStudentsTag">0 · 0%</span>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="87" aria-valuemin="0" aria-valuemax="100" aria-label="Student account share">
-                    <div class="progress-fill fill-info w-87"></div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Student account share">
+                    <div class="progress-fill fill-info" id="adminRoleStudentsBar" style="width: 0%;"></div>
                   </div>
                 </div>
                 <div class="mastery-item">
                   <div class="mastery-meta">
                     <span class="mastery-title">Academic Faculty</span>
-                    <span class="mastery-score-tag mastery-tag-success">142 · 11.1%</span>
+                    <span class="mastery-score-tag mastery-tag-success" id="adminRoleFacultyTag">0 · 0%</span>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="11" aria-valuemin="0" aria-valuemax="100" aria-label="Faculty account share">
-                    <div class="progress-fill fill-success w-11"></div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Faculty account share">
+                    <div class="progress-fill fill-success" id="adminRoleFacultyBar" style="width: 0%;"></div>
                   </div>
                 </div>
                 <div class="mastery-item">
                   <div class="mastery-meta">
                     <span class="mastery-title">Platform Administrators</span>
-                    <span class="mastery-score-tag mastery-tag-warning">22 · 1.7%</span>
+                    <span class="mastery-score-tag mastery-tag-warning" id="adminRoleAdminsTag">0 · 0%</span>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="2" aria-valuemin="0" aria-valuemax="100" aria-label="Administrator account share">
-                    <div class="progress-fill fill-warning w-2"></div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Administrator account share">
+                    <div class="progress-fill fill-warning" id="adminRoleAdminsBar" style="width: 0%;"></div>
                   </div>
                 </div>
               </div>
@@ -249,19 +249,19 @@
                 <div class="mastery-item">
                   <div class="mastery-meta">
                     <span class="mastery-title">Active & In Good Standing</span>
-                    <span class="mastery-score-tag mastery-tag-success">1,261 Accounts · 98.2%</span>
+                    <span class="mastery-score-tag mastery-tag-success" id="adminStatusActiveTag">0 Accounts · 0%</span>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="98" aria-valuemin="0" aria-valuemax="100" aria-label="Active accounts share">
-                    <div class="progress-fill fill-success w-98"></div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Active accounts share">
+                    <div class="progress-fill fill-success" id="adminStatusActiveBar" style="width: 0%;"></div>
                   </div>
                 </div>
                 <div class="mastery-item">
                   <div class="mastery-meta">
                     <span class="mastery-title">Suspended / Review Pending</span>
-                    <span class="mastery-score-tag mastery-tag-danger">23 Accounts · 1.8%</span>
+                    <span class="mastery-score-tag mastery-tag-danger" id="adminStatusSuspendedTag">0 Accounts · 0%</span>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="2" aria-valuemin="0" aria-valuemax="100" aria-label="Suspended accounts share">
-                    <div class="progress-fill fill-danger w-2-danger"></div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Suspended accounts share">
+                    <div class="progress-fill fill-danger" id="adminStatusSuspendedBar" style="width: 0%;"></div>
                   </div>
                 </div>
               </div>

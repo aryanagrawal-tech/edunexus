@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Faculty Course Dashboard - EduNexus AI. Cohort analytics, at-risk student detection, and academic interventions.">
+  <meta name="description" content="Faculty Course Dashboard - EduNexus AI. Cohort analytics, explainable AI insights, at-risk student support, course hub, and evaluation queue.">
   <title>Faculty Dashboard | EduNexus AI</title>
 
   <!-- External CSS Stylesheets Only -->
@@ -45,13 +45,11 @@
           <span>Course Overview</span>
         </a>
 
-        <a href="#analytics" class="nav-link">
+        <a href="#insights" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <line x1="18" y1="20" x2="18" y2="10"></line>
-            <line x1="12" y1="20" x2="12" y2="4"></line>
-            <line x1="6" y1="20" x2="6" y2="14"></line>
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
           </svg>
-          <span>Topic Analytics</span>
+          <span>Explainable Insights</span>
         </a>
 
         <a href="#at-risk" class="nav-link">
@@ -60,8 +58,23 @@
             <line x1="12" y1="9" x2="12" y2="13"></line>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
-          <span>At-Risk Students</span>
-          <span class="nav-link-pill">4 Flagged</span>
+          <span>At-Risk & Support</span>
+          <span class="nav-link-pill" id="sidebarAtRiskPill">0 Flagged</span>
+        </a>
+
+        <a href="#interventions" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>1-to-1 Interventions</span>
+        </a>
+
+        <a href="#course-hub" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Course Hub</span>
         </a>
 
         <a href="#assessments" class="nav-link">
@@ -69,7 +82,7 @@
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
             <polyline points="14 2 14 8 20 8"></polyline>
           </svg>
-          <span>Assessments</span>
+          <span>Assessments & Grading</span>
         </a>
 
         <span class="nav-section-title">Portals</span>
@@ -93,10 +106,10 @@
 
       <div class="sidebar-footer">
         <div class="user-snippet">
-          <div class="user-avatar" aria-hidden="true">SM</div>
+          <div class="user-avatar" id="facultySidebarAvatar" aria-hidden="true">FC</div>
           <div class="user-info">
-            <div class="user-name">Dr. Sarah Mitchell</div>
-            <div class="user-role-label">Associate Professor</div>
+            <div class="user-name" id="facultySidebarName">Faculty Instructor</div>
+            <div class="user-role-label" id="facultySidebarDept">Computer Science</div>
           </div>
           <button type="button" class="logout-icon-btn" data-action="logout" aria-label="Sign out">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -123,7 +136,7 @@
           </button>
           <div class="topbar-title-wrap">
             <h1 class="topbar-page-title">Faculty Course Dashboard</h1>
-            <span class="topbar-subtitle">Department of Computer Science</span>
+            <span class="topbar-subtitle" id="facultyTopbarSubtitle">Live Cohort Analytics & Academic Collaboration</span>
           </div>
         </div>
 
@@ -132,8 +145,7 @@
           <div class="role-switcher-wrap">
             <label for="facultyCourseSelect" class="role-switcher-label">Course:</label>
             <select id="facultyCourseSelect" class="role-switcher-select">
-              <option value="CS301" selected>CS-301: Data Structures & Algorithms</option>
-              <option value="CS305">CS-305: AI Systems Architecture</option>
+              <option value="CS-301" selected>CS-301: Data Structures & Algorithms</option>
             </select>
           </div>
 
@@ -165,8 +177,8 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="statEnrolledCount">48</div>
-            <div class="stat-card-meta">2 Sections Active</div>
+            <div class="stat-card-value" id="statEnrolledCount">0</div>
+            <div class="stat-card-meta" id="statEnrolledMeta">Registered in database</div>
           </div>
 
           <div class="stat-card">
@@ -179,9 +191,9 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="statClassAverage">74.2%</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">+1.8%</span> above departmental target
+            <div class="stat-card-value" id="statClassAverage">0%</div>
+            <div class="stat-card-meta" id="statClassAvgMeta">
+              Computed from real submissions
             </div>
           </div>
 
@@ -196,15 +208,15 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="statAtRiskCount">6</div>
-            <div class="stat-card-meta">
-              <span class="trend-attention">Action required</span> on 2 students
+            <div class="stat-card-value" id="statAtRiskCount">0</div>
+            <div class="stat-card-meta" id="statAtRiskMeta">
+              Evidence-based risk detection
             </div>
           </div>
 
           <div class="stat-card">
             <div class="stat-card-header">
-              <span class="stat-card-label">Attendance Rate</span>
+              <span class="stat-card-label">Submissions Recorded</span>
               <div class="stat-icon-wrap stat-icon-purple" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -214,10 +226,24 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="statAttendanceRate">91.2%</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">Stable</span> over 6 weeks
+            <div class="stat-card-value" id="statAttendanceRate">0</div>
+            <div class="stat-card-meta" id="statSubmissionsMeta">
+              Active evaluation queue
             </div>
+          </div>
+        </section>
+
+        <!-- Priority 5: Explainable and Actionable AI Insights -->
+        <section class="dashboard-card mb-6" id="insights" aria-labelledby="explainableInsightsTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="explainableInsightsTitle" class="card-title">Explainable & Actionable Cohort AI Insights</h2>
+              <span class="card-subtitle" id="explainableInsightsSubtitle">Derived directly from database assessment submissions, topic averages, and failure counts</span>
+            </div>
+            <span class="badge badge-info" id="insightsCountBadge">Live Evidence</span>
+          </div>
+          <div class="card-body">
+            <div id="explainableInsightsContainer" class="rec-list"></div>
           </div>
         </section>
 
@@ -234,14 +260,16 @@
           </div>
         </section>
 
-        <!-- Students Needing Support Section -->
+        <!-- Priority 3A: Students Needing Support Section -->
         <section class="dashboard-card mb-6" id="at-risk" aria-labelledby="atRiskTitle">
           <div class="card-header">
             <div class="card-title-group">
               <h2 id="atRiskTitle" class="card-title">Students Needing Academic Support</h2>
-              <span class="card-subtitle">Algorithmic risk triggers based on quiz scores, submission velocity, and attendance</span>
+              <span class="card-subtitle">Assign targeted remedial exercises or send personalized faculty feedback</span>
             </div>
-            <span class="badge badge-demo">Evidence-Based Triggers</span>
+            <button type="button" id="openDirectSupportBtn" class="btn btn-outline">
+              <span>Assign Support to Any Student</span>
+            </button>
           </div>
           <div class="card-body">
             <div class="table-responsive">
@@ -252,8 +280,8 @@
                     <th scope="col">Score</th>
                     <th scope="col">Risk Level</th>
                     <th scope="col">Diagnostic Trigger Factors</th>
-                    <th scope="col">Last Active</th>
-                    <th scope="col">Suggested Intervention</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Faculty Action</th>
                   </tr>
                 </thead>
                 <tbody id="atRiskTableBody"></tbody>
@@ -262,12 +290,98 @@
           </div>
         </section>
 
-        <!-- Assessment Management Interface -->
-        <section class="dashboard-card" id="assessments" aria-labelledby="assessmentsTitle">
+        <!-- Priority 3B: One-to-One Student Help Requests & Academic Interventions -->
+        <section class="dashboard-card mb-6" id="interventions" aria-labelledby="interventionsQueueTitle">
           <div class="card-header">
             <div class="card-title-group">
-              <h2 id="assessmentsTitle" class="card-title">Course Activity & Assessments</h2>
-              <span class="card-subtitle">Recent quizzes, midterm exams, and submission rates</span>
+              <h2 id="interventionsQueueTitle" class="card-title">One-to-One Student Help Requests & Interventions</h2>
+              <span class="card-subtitle">Respond to student office-hour requests, topic inquiries, and track ongoing interventions</span>
+            </div>
+            <span class="badge badge-info" id="interventionsCountBadge">0 Open</span>
+          </div>
+          <div class="card-body">
+            <div id="facultyInterventionsList" class="rec-list"></div>
+          </div>
+        </section>
+
+        <!-- Priority 4: Unified Course Hub Management (Announcements & Study Materials) -->
+        <section class="dashboard-card mb-6" id="course-hub" aria-labelledby="facultyCourseHubTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="facultyCourseHubTitle" class="card-title">Unified Course Hub — Publish Announcements & Study Materials</h2>
+              <span class="card-subtitle">Share official course updates and learning resources directly with enrolled students</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="grid-2col">
+              <!-- Publish Announcement Column -->
+              <div>
+                <h3 class="card-title mb-2" style="font-size: 0.95rem;">Publish Course Announcement</h3>
+                <form id="facultyAnnouncementForm" class="inline-form-grid" aria-label="Publish Announcement Form">
+                  <div>
+                    <label for="announcementTitleInput" class="form-label">Announcement Title</label>
+                    <input type="text" id="announcementTitleInput" class="form-input" placeholder="e.g. Midterm Review Session Scheduled" required>
+                  </div>
+                  <div>
+                    <label for="announcementPriorityInput" class="form-label">Priority</label>
+                    <select id="announcementPriorityInput" class="form-input">
+                      <option value="normal">Normal</option>
+                      <option value="important">Important</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                  <div class="inline-form-full">
+                    <label for="announcementMessageInput" class="form-label">Message Content</label>
+                    <textarea id="announcementMessageInput" class="form-input" rows="2" placeholder="Enter announcement details for students..." required></textarea>
+                  </div>
+                  <div class="inline-form-actions">
+                    <button type="submit" id="publishAnnouncementBtn" class="btn btn-primary">Publish Announcement</button>
+                  </div>
+                </form>
+                <div id="facultyAnnouncementsList" class="rec-list"></div>
+              </div>
+
+              <!-- Add Study Material Column -->
+              <div>
+                <h3 class="card-title mb-2" style="font-size: 0.95rem;">Upload / Link Course Study Material</h3>
+                <form id="facultyMaterialForm" class="inline-form-grid" aria-label="Add Study Material Form">
+                  <div>
+                    <label for="materialTitleInput" class="form-label">Material Title</label>
+                    <input type="text" id="materialTitleInput" class="form-input" placeholder="e.g. Graph Traversal Interactive Guide" required>
+                  </div>
+                  <div>
+                    <label for="materialTopicInput" class="form-label">Topic</label>
+                    <input type="text" id="materialTopicInput" class="form-input" placeholder="e.g. Graph Algorithms" required>
+                  </div>
+                  <div>
+                    <label for="materialTypeInput" class="form-label">Resource Format</label>
+                    <select id="materialTypeInput" class="form-input">
+                      <option value="Lecture Notes">Lecture Notes</option>
+                      <option value="Practice Set">Practice Set</option>
+                      <option value="Reference Guide">Reference Guide</option>
+                      <option value="Video Walkthrough">Video Walkthrough</option>
+                    </select>
+                  </div>
+                  <div class="inline-form-full">
+                    <label for="materialContentInput" class="form-label">Study Summary or Resource URL</label>
+                    <textarea id="materialContentInput" class="form-input" rows="2" placeholder="Provide key study notes, guidelines, or resource URL..." required></textarea>
+                  </div>
+                  <div class="inline-form-actions">
+                    <button type="submit" id="publishMaterialBtn" class="btn btn-primary">Publish Material</button>
+                  </div>
+                </form>
+                <div id="facultyMaterialsList" class="rec-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Priority 4: Assessment Creation & Submissions Evaluation Queue -->
+        <section class="dashboard-card mb-6" id="assessments" aria-labelledby="assessmentsTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="assessmentsTitle" class="card-title">Course Assessments & Assignment Creation</h2>
+              <span class="card-subtitle">Create new course-wide or targeted assignments and monitor activity performance</span>
             </div>
             <button type="button" id="createAssessmentBtn" class="btn btn-primary">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -278,14 +392,46 @@
             </button>
           </div>
           <div class="card-body">
+            <!-- Create Assessment Form -->
+            <form id="facultyCreateAssessmentForm" class="inline-form-grid" aria-label="Create Assessment Form">
+              <div>
+                <label for="newAssessmentTitle" class="form-label">Assignment / Quiz Title</label>
+                <input type="text" id="newAssessmentTitle" class="form-input" placeholder="e.g. Dynamic Programming Remedial Quiz" required>
+              </div>
+              <div>
+                <label for="newAssessmentTopic" class="form-label">Curriculum Topic</label>
+                <input type="text" id="newAssessmentTopic" class="form-input" placeholder="e.g. Dynamic Programming" required>
+              </div>
+              <div>
+                <label for="newAssessmentType" class="form-label">Activity Type</label>
+                <select id="newAssessmentType" class="form-input">
+                  <option value="quiz">Quiz</option>
+                  <option value="assignment">Assignment</option>
+                  <option value="lab">Lab Exercise</option>
+                  <option value="project">Project</option>
+                </select>
+              </div>
+              <div>
+                <label for="newAssessmentDueDate" class="form-label">Due Date</label>
+                <input type="date" id="newAssessmentDueDate" class="form-input">
+              </div>
+              <div class="inline-form-full">
+                <label for="newAssessmentInstructions" class="form-label">Instructions & Evaluation Criteria</label>
+                <textarea id="newAssessmentInstructions" class="form-input" rows="2" placeholder="Specify problem statement, deliverables, and grading rubric..."></textarea>
+              </div>
+              <div class="inline-form-actions">
+                <button type="submit" id="submitNewAssessmentBtn" class="btn btn-primary">Publish Assessment</button>
+              </div>
+            </form>
+
             <div class="table-responsive">
               <table class="data-table" aria-label="Course Assessments Table">
                 <thead>
                   <tr>
                     <th scope="col">Assessment Title</th>
-                    <th scope="col">Date / Due</th>
-                    <th scope="col">Submissions</th>
-                    <th scope="col">Class Average</th>
+                    <th scope="col">Topic & Due Date</th>
+                    <th scope="col">Type / Target</th>
+                    <th scope="col">Max Score</th>
                     <th scope="col">Status</th>
                   </tr>
                 </thead>
@@ -294,15 +440,41 @@
             </div>
           </div>
         </section>
+
+        <!-- Priority 4: Submissions & Evaluation Queue -->
+        <section class="dashboard-card" id="evaluation-queue" aria-labelledby="evalQueueTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="evalQueueTitle" class="card-title">Student Submissions & Evaluation Queue</h2>
+              <span class="card-subtitle">Review student assignment submissions, record marks (0–100), and provide written feedback</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="data-table" aria-label="Submissions Evaluation Table">
+                <thead>
+                  <tr>
+                    <th scope="col">Student</th>
+                    <th scope="col">Assignment & Topic</th>
+                    <th scope="col">Student Response / Notes</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Evaluate (Marks & Feedback)</th>
+                  </tr>
+                </thead>
+                <tbody id="evaluationQueueTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
 
-  <!-- Academic Intervention Modal Dialog -->
+  <!-- Academic Intervention & Targeted Practice Modal Dialog -->
   <div id="interventionModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 id="modalTitle" class="modal-title">Dispatch Academic Intervention</h3>
+        <h3 id="modalTitle" class="modal-title">Dispatch Academic Support Action</h3>
         <button type="button" id="closeModalBtn" class="modal-close-btn" aria-label="Close dialog">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -312,12 +484,26 @@
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label class="form-label">Student Recipient</label>
-          <div id="modalStudentName" class="cell-title">Student Name</div>
+          <label for="modalStudentSelect" class="form-label">Student Recipient</label>
+          <select id="modalStudentSelect" class="form-input"></select>
+          <div id="modalStudentName" class="cell-sub" style="margin-top: 4px;"></div>
         </div>
 
         <div class="form-group">
-          <label for="modalSuggestedAction" class="form-label">Intervention Type</label>
+          <label for="modalActionModeSelect" class="form-label">Support Action Mode</label>
+          <select id="modalActionModeSelect" class="form-input">
+            <option value="feedback">Send Personalized Faculty Feedback / Counseling</option>
+            <option value="targeted_practice">Assign Targeted Remedial Practice Quiz</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="modalTopicInput" class="form-label">Target Topic</label>
+          <input type="text" id="modalTopicInput" class="form-input" placeholder="e.g. Dynamic Programming" value="Dynamic Programming">
+        </div>
+
+        <div class="form-group">
+          <label for="modalSuggestedAction" class="form-label">Action Title / Assignment Title</label>
           <input 
             type="text" 
             id="modalSuggestedAction" 
@@ -327,7 +513,7 @@
         </div>
 
         <div class="form-group">
-          <label for="modalInterventionNotes" class="form-label">Counseling Notes / Action Items</label>
+          <label for="modalInterventionNotes" class="form-label">Feedback Message / Practice Instructions</label>
           <textarea 
             id="modalInterventionNotes" 
             class="form-input" 
@@ -337,7 +523,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="cancelModalBtn" class="btn btn-outline">Cancel</button>
-        <button type="button" id="confirmInterventionBtn" class="btn btn-primary">Dispatch Intervention</button>
+        <button type="button" id="confirmInterventionBtn" class="btn btn-primary">Dispatch Support Action</button>
       </div>
     </div>
   </div>

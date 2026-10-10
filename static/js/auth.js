@@ -116,6 +116,36 @@ function initLoginForm() {
     // localStorage might be unavailable in restricted environments
   }
 
+  // Show success message if redirected from registration
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const regSuccessMsg = sessionStorage.getItem('edunexus_registration_success');
+    const regEmail = sessionStorage.getItem('edunexus_registered_email');
+    if (urlParams.get('registered') === '1' || regSuccessMsg) {
+      const displayMsg = regSuccessMsg || 'Registration successful. Please log in.';
+      sessionStorage.removeItem('edunexus_registration_success');
+      if (regEmail && emailInput && !emailInput.value) {
+        emailInput.value = regEmail;
+      }
+      sessionStorage.removeItem('edunexus_registered_email');
+      if (formAlert) {
+        formAlert.className = 'alert alert-success is-visible';
+        formAlert.innerHTML = `
+          <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+          </svg>
+          <div class="alert-content">
+            <strong>Registration Successful</strong>
+            <div>${displayMsg}</div>
+          </div>
+        `;
+      }
+      if (window.showToast) {
+        window.showToast('Registration successful. Please log in.', 'success');
+      }
+    }
+  } catch (e) {}
+
   // Real-time email validation on blur/input
   emailInput.addEventListener('blur', () => {
     const val = emailInput.value.trim();
@@ -383,6 +413,12 @@ function initRegisterForm() {
         throw new Error((response && response.message) || 'Account could not be saved to the database.');
       }
 
+      const successMessage = 'Registration successful. Please log in.';
+      try {
+        sessionStorage.setItem('edunexus_registration_success', successMessage);
+        sessionStorage.setItem('edunexus_registered_email', emailVal);
+      } catch (e) {}
+
       if (formAlert) {
         formAlert.className = 'alert alert-success is-visible';
         formAlert.innerHTML = `
@@ -390,20 +426,25 @@ function initRegisterForm() {
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
           </svg>
           <div class="alert-content">
-            <strong>Registration Complete</strong>
+            <strong>Registration successful. Please log in.</strong>
             <div>${response.message}</div>
             <div class="alert-subtext">
-              You can now navigate to <a href="/login" class="auth-switch-link">Sign In</a> to access your account.
+              Redirecting to <a href="/login?registered=1" class="auth-switch-link">Login page</a>...
             </div>
           </div>
         `;
       }
 
-      window.showToast(`Account registered as ${roleVal.toUpperCase()}!`, 'success');
+      window.showToast(successMessage, 'success');
 
       // Clear sensitive inputs
       passwordInput.value = '';
       confirmPasswordInput.value = '';
+
+      // Redirect to Login page after confirmed database insert
+      setTimeout(() => {
+        window.location.assign('/login?registered=1');
+      }, 900);
 
     } catch (err) {
       if (formAlert) {

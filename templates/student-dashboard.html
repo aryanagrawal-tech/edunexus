@@ -69,6 +69,30 @@
           <span>AI Study Assistant</span>
         </a>
 
+        <a href="#course-hub" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+          <span>Course Hub</span>
+        </a>
+
+        <a href="#submissions" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>Assignments & Marks</span>
+        </a>
+
+        <a href="#support" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+          </svg>
+          <span>1-to-1 Faculty Support</span>
+        </a>
+
         <span class="nav-section-title">Portals</span>
         <a href="{{ url_for('faculty_dashboard_view') }}" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -90,10 +114,10 @@
 
       <div class="sidebar-footer">
         <div class="user-snippet">
-          <div class="user-avatar" aria-hidden="true">AA</div>
+          <div class="user-avatar" id="studentSidebarAvatar" aria-hidden="true">ST</div>
           <div class="user-info">
-            <div class="user-name">Aryan Agrawal</div>
-            <div class="user-role-label">B.Sc. IT (Honors)</div>
+            <div class="user-name" id="studentSidebarName">Student Account</div>
+            <div class="user-role-label" id="studentSidebarCourse">Loading profile...</div>
           </div>
           <button type="button" class="logout-icon-btn" data-action="logout" aria-label="Sign out">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -120,7 +144,7 @@
           </button>
           <div class="topbar-title-wrap">
             <h1 class="topbar-page-title">Student Dashboard</h1>
-            <span class="topbar-subtitle">Academic Year 2026 · Semester VI</span>
+            <span class="topbar-subtitle" id="studentTopbarSubtitle">Academic Portal · Live Student Analytics</span>
           </div>
         </div>
 
@@ -150,42 +174,42 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="studentStatOverallScore">82.4%</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">+3.2%</span> vs last term
+            <div class="stat-card-value" id="studentStatOverallScore">0%</div>
+            <div class="stat-card-meta" id="studentStatScoreMeta">
+              Awaiting graded submissions
             </div>
           </div>
 
           <div class="stat-card">
             <div class="stat-card-header">
-              <span class="stat-card-label">Current GPA</span>
+              <span class="stat-card-label">Enrolled Course</span>
               <div class="stat-icon-wrap stat-icon-green" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">3.72</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">Top 12%</span> in department
+            <div class="stat-card-value" id="studentStatEnrolledCourse" style="font-size: 1.25rem;">Not Assigned</div>
+            <div class="stat-card-meta" id="studentStatCourseMeta">
+              Active enrollment status
             </div>
           </div>
 
           <div class="stat-card">
             <div class="stat-card-header">
-              <span class="stat-card-label">Attendance Rate</span>
+              <span class="stat-card-label">Topics Evaluated</span>
               <div class="stat-icon-wrap stat-icon-purple" aria-hidden="true">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">94.5%</div>
-            <div class="stat-card-meta">
-              <span class="trend-positive">Consistent</span> across 4 courses
+            <div class="stat-card-value" id="studentStatTopicsTracked">0</div>
+            <div class="stat-card-meta" id="studentStatTopicsMeta">
+              No assessment data available
             </div>
           </div>
 
@@ -199,15 +223,15 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value" id="studentStatSubmissions">19 / 20</div>
+            <div class="stat-card-value" id="studentStatSubmissions">0 Recorded</div>
             <div class="stat-card-meta" id="studentStatCompletionMeta">
-              <span class="trend-positive">95%</span> submission rate
+              <span class="trend-positive">0%</span> on-time rate
             </div>
           </div>
         </section>
 
         <!-- Main Analytics & AI Assistant Grid -->
-        <div class="grid-2col">
+        <div class="grid-2col mb-6">
           <!-- Left Column: Topic Mastery & Weak-Topic Alerts -->
           <div class="dashboard-grid-column">
             <!-- Overall Academic Score Gauge Card -->
@@ -215,9 +239,9 @@
               <div class="card-header">
                 <div class="card-title-group">
                   <h2 id="scoreGaugeTitle" class="card-title">Overall Academic Mastery Gauge</h2>
-                  <span class="card-subtitle">Synthesized mastery index across enrolled courses</span>
+                  <span class="card-subtitle">Synthesized mastery index across submitted assessments</span>
                 </div>
-                <span class="badge badge-info">Honors Track</span>
+                <span class="badge badge-info" id="studentTrackBadge">Live Profile</span>
               </div>
               <div class="card-body">
                 <div id="overallScoreDonut" class="chart-container"></div>
@@ -244,7 +268,7 @@
                   <h2 id="weakAlertsTitle" class="card-title">Weak-Topic Alerts</h2>
                   <span class="card-subtitle">Areas requiring targeted study before upcoming assessments</span>
                 </div>
-                <span id="weakTopicsCountBadge" class="badge badge-info">2 Detected</span>
+                <span id="weakTopicsCountBadge" class="badge badge-info">0 Detected</span>
               </div>
               <div class="card-body">
                 <div id="weakAlertsContainer" class="weak-alert-list"></div>
@@ -271,8 +295,8 @@
               <div id="chatMessages" class="chat-messages-box" aria-live="polite">
                 <div class="chat-message chat-assistant">
                   <div class="chat-avatar" aria-hidden="true">AI</div>
-                  <div class="chat-bubble">
-                    Hello Aryan! I am your EduNexus AI Academic Assistant. I analyze your topic mastery data to provide tailored academic explanations and study strategies. How can I help you today?
+                  <div class="chat-bubble" id="assistantWelcomeBubble">
+                    Hello! I am your EduNexus AI Academic Assistant. I analyze your topic mastery data to provide tailored academic explanations and study strategies. How can I help you today?
                   </div>
                 </div>
               </div>
@@ -302,6 +326,7 @@
                   <h2 id="recsTitle" class="card-title">Evidence-Based Recommendations</h2>
                   <span class="card-subtitle">Personalized action plan generated from topic performance</span>
                 </div>
+                <span class="nav-link-pill" id="recsCountBadge">0 Actions</span>
               </div>
               <div class="card-body">
                 <div id="recommendationsContainer" class="rec-list"></div>
@@ -322,6 +347,112 @@
             </section>
           </div>
         </div>
+
+        <!-- Priority 4: Unified Course Hub (Courses, Announcements, & Faculty Study Materials) -->
+        <section class="dashboard-card mb-6" id="course-hub" aria-labelledby="studentCourseHubTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="studentCourseHubTitle" class="card-title">Unified Course Hub — Announcements & Study Materials</h2>
+              <span class="card-subtitle">Official course updates and faculty-published learning materials</span>
+            </div>
+            <span class="badge badge-info" id="studentCourseHubBadge">CS-301</span>
+          </div>
+          <div class="card-body">
+            <div class="grid-2col">
+              <div>
+                <h3 class="card-title mb-2" style="font-size: 0.95rem;">Course Announcements</h3>
+                <div id="studentAnnouncementsContainer" class="rec-list"></div>
+              </div>
+              <div>
+                <h3 class="card-title mb-2" style="font-size: 0.95rem;">Faculty Study Materials</h3>
+                <div id="studentCourseMaterialsContainer" class="rec-list"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Priority 4: Assignments, Submissions & Faculty Evaluation Marks -->
+        <section class="dashboard-card mb-6" id="submissions" aria-labelledby="studentSubmissionsTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="studentSubmissionsTitle" class="card-title">Course Assignments & Submission History</h2>
+              <span class="card-subtitle">Submit coursework responses and view faculty marks and written feedback</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <!-- Submit Assignment Form -->
+            <form id="studentSubmitAssignmentForm" class="inline-form-grid" aria-label="Submit Assignment Form">
+              <div>
+                <label for="studentActivitySelect" class="form-label">Select Assignment / Quiz</label>
+                <select id="studentActivitySelect" class="form-input" required>
+                  <option value="">Loading assignments...</option>
+                </select>
+              </div>
+              <div>
+                <label for="studentSelfScoreInput" class="form-label">Self-Check Score (Optional 0-100)</label>
+                <input type="number" id="studentSelfScoreInput" class="form-input" min="0" max="100" placeholder="Leave blank for faculty grading">
+              </div>
+              <div class="inline-form-full">
+                <label for="studentResponseTextInput" class="form-label">Submission Response / Solution Summary</label>
+                <textarea id="studentResponseTextInput" class="form-input" rows="2" placeholder="Paste your solution summary, complexity analysis, or repository link..." required></textarea>
+              </div>
+              <div class="inline-form-actions">
+                <button type="submit" id="studentSubmitActivityBtn" class="btn btn-primary">Submit Assignment</button>
+              </div>
+            </form>
+
+            <!-- Submissions & Marks Table -->
+            <div class="table-responsive">
+              <table class="data-table" aria-label="Student Submissions Table">
+                <thead>
+                  <tr>
+                    <th scope="col">Assignment</th>
+                    <th scope="col">Topic</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Marks</th>
+                    <th scope="col">Faculty Feedback / Submission Notes</th>
+                    <th scope="col">Submitted At</th>
+                  </tr>
+                </thead>
+                <tbody id="studentSubmissionsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Priority 3: Faculty Feedback & 1-to-1 Academic Intervention / Help Requests -->
+        <section class="dashboard-card" id="support" aria-labelledby="studentSupportTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="studentSupportTitle" class="card-title">One-to-One Academic Support & Faculty Feedback</h2>
+              <span class="card-subtitle">Request 1-on-1 office hours or topic support and track faculty responses</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <form id="studentHelpRequestForm" class="inline-form-grid" aria-label="Request Academic Support Form">
+              <div>
+                <label for="helpRequestType" class="form-label">Request Type</label>
+                <select id="helpRequestType" class="form-input" required>
+                  <option value="help_request">Topic Clarification / Help Request</option>
+                  <option value="office_hours">1-to-1 Office Hours Session</option>
+                </select>
+              </div>
+              <div>
+                <label for="helpRequestTopic" class="form-label">Course Topic</label>
+                <input type="text" id="helpRequestTopic" class="form-input" placeholder="e.g. Graph Algorithms, Dynamic Programming" required>
+              </div>
+              <div class="inline-form-full">
+                <label for="helpRequestDetails" class="form-label">How can your instructor help?</label>
+                <textarea id="helpRequestDetails" class="form-input" rows="2" placeholder="Describe the concept or problem you would like to review with faculty..." required></textarea>
+              </div>
+              <div class="inline-form-actions">
+                <button type="submit" id="studentHelpRequestBtn" class="btn btn-primary">Request Faculty Support</button>
+              </div>
+            </form>
+
+            <div id="studentInterventionsList" class="rec-list"></div>
+          </div>
+        </section>
       </div>
     </main>
   </div>
