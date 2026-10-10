@@ -280,11 +280,11 @@ function initRoleSwitcher() {
     switcher.addEventListener('change', () => {
       const targetRole = switcher.value;
       if (targetRole === 'student') {
-        window.location.href = 'student-dashboard.html';
+        window.location.href = '/student-dashboard';
       } else if (targetRole === 'faculty') {
-        window.location.href = 'faculty-dashboard.html';
+        window.location.href = '/faculty-dashboard';
       } else if (targetRole === 'admin') {
-        window.location.href = 'admin-dashboard.html';
+        window.location.href = '/admin-dashboard';
       }
     });
   }
@@ -297,7 +297,7 @@ function initRoleSwitcher() {
       }
       window.showToast("Logged out of session. Redirecting to sign-in...", "info");
       setTimeout(() => {
-        window.location.href = 'login.html';
+        window.location.href = '/login';
       }, 500);
     });
   });

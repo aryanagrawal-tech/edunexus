@@ -7,10 +7,9 @@
   <title>Register | EduNexus AI</title>
   
   <!-- External CSS Stylesheets Only -->
-<link rel="stylesheet" href="/static/css/variables.css">
-<link rel="stylesheet" href="/static/css/base.css">
-<link rel="stylesheet" href="/static/css/auth.css">
-
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
 </head>
 <body class="auth-page">
 
@@ -298,7 +297,7 @@
 
         <footer class="auth-switch-footer">
           Already have an account? 
-          <a href="/login" class="auth-switch-link">Sign in here</a>
+          <a href="{{ url_for('login_view') }}" class="auth-switch-link">Sign in here</a>
         </footer>
       </div>
     </section>
@@ -307,7 +306,7 @@
   <div id="toastContainer" class="auth-toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <!-- External Vanilla JavaScript Only -->
-<script src="/static/js/api.js"></script>
-<script src="/static/js/auth.js"></script>
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/auth.js') }}"></script>
 </body>
 </html>

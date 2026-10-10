@@ -7,10 +7,10 @@
   <title>Faculty Dashboard | EduNexus AI</title>
 
   <!-- External CSS Stylesheets Only -->
-  <link rel="stylesheet" href="../static/css/variables.css">
-  <link rel="stylesheet" href="../static/css/base.css">
-  <link rel="stylesheet" href="../static/css/dashboard.css">
-  <link rel="stylesheet" href="../static/css/components.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
 </head>
 <body class="dashboard-page">
 
@@ -21,7 +21,7 @@
     <!-- Sidebar Navigation -->
     <aside id="appSidebar" class="app-sidebar" aria-label="Faculty Navigation">
       <div class="sidebar-header">
-        <a href="faculty-dashboard.html" class="sidebar-logo-wrap">
+        <a href="{{ url_for('faculty_dashboard_view') }}" class="sidebar-logo-wrap">
           <svg class="sidebar-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
             <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
@@ -73,7 +73,7 @@
         </a>
 
         <span class="nav-section-title">Portals</span>
-        <a href="student-dashboard.html" class="nav-link">
+        <a href="{{ url_for('student_dashboard_view') }}" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
             <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
@@ -81,7 +81,7 @@
           <span>Student Portal</span>
         </a>
 
-        <a href="admin-dashboard.html" class="nav-link">
+        <a href="{{ url_for('admin_dashboard_view') }}" class="nav-link">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
             <line x1="8" y1="21" x2="16" y2="21"></line>
@@ -355,9 +355,9 @@
   <div id="toastContainer" class="auth-toast-container" aria-live="polite" aria-atomic="true"></div>
 
   <!-- External JavaScript Files Only -->
-  <script src="../static/js/api.js"></script>
-  <script src="../static/js/mock-data.js"></script>
-  <script src="../static/js/charts.js"></script>
-  <script src="../static/js/faculty.js"></script>
+  <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/mock-data.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/faculty.js') }}"></script>
 </body>
 </html>

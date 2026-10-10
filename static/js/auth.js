@@ -188,9 +188,9 @@ function initLoginForm() {
 
       // Simulated success feedback
       const role = response.data.user.role.toLowerCase();
-      let targetDashboard = 'student-dashboard.html';
-      if (role === 'faculty') targetDashboard = 'faculty-dashboard.html';
-      else if (role === 'admin') targetDashboard = 'admin-dashboard.html';
+      let targetDashboard = '/student-dashboard';
+      if (role === 'faculty') targetDashboard = '/faculty-dashboard';
+      else if (role === 'admin') targetDashboard = '/admin-dashboard';
 
       if (formAlert) {
         formAlert.className = 'alert alert-success is-visible';
@@ -386,7 +386,7 @@ function initRegisterForm() {
             <strong>Registration Recorded (Demo Mode)</strong>
             <div>${response.message}</div>
             <div class="alert-subtext">
-              You can now navigate to <a href="login.html" class="auth-switch-link">Sign In</a> to test the login experience.
+              You can now navigate to <a href="/login" class="auth-switch-link">Sign In</a> to test the login experience.
             </div>
           </div>
         `;

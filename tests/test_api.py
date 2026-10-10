@@ -393,9 +393,70 @@ def test_view_routes(client):
         assert res.status_code == 200, f"Failed for path: {path}"
 
 
+def test_navigation_links_and_static_assets(client):
+    # Verify Home page links
+    home_html = client.get("/").get_data(as_text=True)
+    assert 'href="/login"' in home_html
+    assert 'href="/register"' in home_html
+    assert 'href="/student-dashboard"' in home_html
+    assert 'href="/faculty-dashboard"' in home_html
+    assert 'href="/admin-dashboard"' in home_html
+    assert "templates/" not in home_html
+
+    # Verify Login page links & static URLs
+    login_html = client.get("/login").get_data(as_text=True)
+    assert 'href="/register"' in login_html
+    assert 'href="/static/css/auth.css"' in login_html
+    assert 'src="/static/js/auth.js"' in login_html
+    assert "register.html" not in login_html
+    assert "../static" not in login_html
+
+    # Verify Register page links & static URLs
+    reg_html = client.get("/register").get_data(as_text=True)
+    assert 'href="/login"' in reg_html
+    assert 'href="/static/css/auth.css"' in reg_html
+    assert 'src="/static/js/auth.js"' in reg_html
+
+    # Verify Dashboard cross-links
+    student_html = client.get("/student-dashboard").get_data(as_text=True)
+    assert 'href="/faculty-dashboard"' in student_html
+    assert 'href="/admin-dashboard"' in student_html
+    assert 'src="/static/js/student.js"' in student_html
+
+    faculty_html = client.get("/faculty-dashboard").get_data(as_text=True)
+    assert 'href="/student-dashboard"' in faculty_html
+    assert 'href="/admin-dashboard"' in faculty_html
+    assert 'src="/static/js/faculty.js"' in faculty_html
+
+    admin_html = client.get("/admin-dashboard").get_data(as_text=True)
+    assert 'href="/student-dashboard"' in admin_html
+    assert 'href="/faculty-dashboard"' in admin_html
+    assert 'src="/static/js/admin.js"' in admin_html
+
+    # Verify all static CSS and JS files load with 200 OK
+    static_files = [
+        "/static/css/variables.css",
+        "/static/css/base.css",
+        "/static/css/auth.css",
+        "/static/css/dashboard.css",
+        "/static/css/components.css",
+        "/static/js/api.js",
+        "/static/js/auth.js",
+        "/static/js/charts.js",
+        "/static/js/mock-data.js",
+        "/static/js/student.js",
+        "/static/js/faculty.js",
+        "/static/js/admin.js"
+    ]
+    for asset in static_files:
+        res = client.get(asset)
+        assert res.status_code == 200, f"Static asset failed to load: {asset}"
+
+
 def test_api_404_handler(client):
     res = client.get("/api/unknown_endpoint")
     assert res.status_code == 404
     data = res.get_json()
     assert data["success"] is False
     assert "Endpoint not found" in data["error"]
+
