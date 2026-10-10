@@ -8,7 +8,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from flask import Flask, jsonify, request, render_template, send_from_directory
+from flask import Flask, jsonify, request, render_template, send_from_directory, session, redirect, url_for
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
@@ -34,7 +34,78 @@ from services.study_assistant import (
 )
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
-CORS(app)
+app.secret_key = (
+    os.getenv("FLASK_SECRET_KEY")
+    or os.getenv("SECRET_KEY")
+    or "edunexus-ai-secure-session-key"
+)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+CORS(app, supports_credentials=True)
+
+DASHBOARD_BY_ROLE = {
+    "student": "/student-dashboard",
+    "faculty": "/faculty-dashboard",
+    "admin": "/admin-dashboard",
+}
+
+
+def get_session_user():
+    """Returns the currently authenticated user dict from the server-side Flask session."""
+    user = session.get("user")
+    if isinstance(user, dict) and user.get("role") and user.get("email"):
+        return user
+    return None
+
+
+def require_api_auth(allowed_roles=None):
+    """
+    Verifies that the request has a valid server-side session and an authorized role.
+    Never trusts client-supplied role parameters over the server-side session.
+    """
+    user = get_session_user()
+    if not user:
+        return None, (
+            jsonify({
+                "success": False,
+                "error": "Authentication required. Please log in.",
+                "message": "Authentication required. Please log in."
+            }),
+            401,
+        )
+
+    actual_role = str(user.get("role", "")).strip().lower()
+    if allowed_roles is not None:
+        normalized_allowed = {r.strip().lower() for r in allowed_roles}
+        if actual_role not in normalized_allowed:
+            return None, (
+                jsonify({
+                    "success": False,
+                    "error": f"Forbidden: Role '{actual_role}' is not authorized for this resource.",
+                    "message": f"Forbidden: Role '{actual_role}' is not authorized for this resource."
+                }),
+                403,
+            )
+
+    return user, None
+
+
+@app.after_request
+def apply_security_headers(response):
+    """Prevents browser caching of protected dashboard pages and API responses after logout."""
+    path = request.path or ""
+    if (
+        path.startswith("/student-dashboard")
+        or path.startswith("/faculty-dashboard")
+        or path.startswith("/admin-dashboard")
+        or path.startswith("/api/")
+        or path.startswith("/auth/")
+    ):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
 
 # ==========================================
 # Health & Status Endpoint
@@ -58,7 +129,10 @@ def health_check():
 
 @app.route("/api/students", methods=["GET"])
 def get_students():
-    """Retrieves list of all enrolled students."""
+    """Retrieves list of all enrolled students (Faculty & Admin only)."""
+    _, err_resp = require_api_auth(["faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         students = db_service.get_students()
         return jsonify({
@@ -72,7 +146,10 @@ def get_students():
 
 @app.route("/api/faculty", methods=["GET"])
 def get_faculty():
-    """Retrieves list of all registered faculty members."""
+    """Retrieves list of all registered faculty members (Faculty & Admin only)."""
+    _, err_resp = require_api_auth(["faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         faculty = db_service.get_faculty()
         return jsonify({
@@ -87,6 +164,9 @@ def get_faculty():
 @app.route("/api/activities", methods=["GET"])
 def get_activities():
     """Retrieves course activities and curriculum modules (optionally filtered for a student)."""
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         student_id = request.args.get("student_id")
         activities = db_service.get_activities(student_id=student_id)
@@ -101,11 +181,12 @@ def get_activities():
 
 @app.route("/api/activities", methods=["POST"])
 def create_activity():
-    """Creates a new course activity or targeted student exercise."""
+    """Creates a new course activity or targeted student exercise (Faculty & Admin only)."""
+    user, err_resp = require_api_auth(["faculty", "admin"])
+    if err_resp:
+        return err_resp
+
     payload = request.get_json(silent=True) or {}
-    role = (payload.get("role") or "").strip().lower()
-    if role == "student":
-        return jsonify({"success": False, "error": "Students are not authorized to create course assessments."}), 403
 
     title = payload.get("title", "").strip()
     topic = payload.get("topic", "").strip()
@@ -115,7 +196,7 @@ def create_activity():
     due_date = (payload.get("due_date") or "").strip()
     assigned_student_id = payload.get("assigned_student_id")
     course_code = (payload.get("course_code") or "CS-301").strip()
-    created_by_faculty = (payload.get("created_by_faculty") or "Course Faculty").strip()
+    created_by_faculty = (payload.get("created_by_faculty") or user.get("name") or "Course Faculty").strip()
 
     # Validation
     if not title:
@@ -188,6 +269,9 @@ def get_student_dashboard(student_id):
     Real profile, overall score, topic mastery, weak-topic detection,
     personalized recommendations, assigned activities, submissions, and faculty collaboration items.
     """
+    _, err_resp = require_api_auth(["student"])
+    if err_resp:
+        return err_resp
     try:
         student = db_service.get_student_by_id(student_id)
         if not student:
@@ -260,6 +344,9 @@ def get_faculty_overview():
     Class average, topic mastery distribution, at-risk students needing support,
     explainable AI insights, evaluation queue, interventions, and course hub data.
     """
+    _, err_resp = require_api_auth(["faculty"])
+    if err_resp:
+        return err_resp
     try:
         students = db_service.get_students()
         all_submissions = db_service.get_submissions()
@@ -297,6 +384,9 @@ def get_faculty_overview():
 @app.route("/api/submissions", methods=["GET"])
 def list_submissions():
     """Retrieves submissions, optionally filtered by student_id."""
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         student_id = request.args.get("student_id")
         subs = db_service.get_submissions(student_id=student_id)
@@ -312,6 +402,9 @@ def list_submissions():
 @app.route("/api/submissions", methods=["POST"])
 def submit_activity():
     """Records a student submission with score or assignment response text."""
+    _, err_resp = require_api_auth(["student"])
+    if err_resp:
+        return err_resp
     payload = request.get_json(silent=True) or {}
     student_id = payload.get("student_id")
     activity_id = payload.get("activity_id")
@@ -374,17 +467,14 @@ def evaluate_submission_route(submission_id):
     Allows faculty to evaluate a student submission with marks and feedback.
     Enforces role-based authorization: students cannot modify faculty evaluation records.
     """
-    payload = request.get_json(silent=True) or {}
-    role = (payload.get("role") or "faculty").strip().lower()
-    if role == "student":
-        return jsonify({
-            "success": False,
-            "error": "Unauthorized: Students cannot modify faculty evaluation records."
-        }), 403
+    user, err_resp = require_api_auth(["faculty"])
+    if err_resp:
+        return err_resp
 
+    payload = request.get_json(silent=True) or {}
     score = payload.get("score")
     feedback = (payload.get("feedback") or "").strip()
-    evaluated_by = (payload.get("evaluated_by") or "Course Faculty").strip()
+    evaluated_by = (payload.get("evaluated_by") or user.get("name") or "Course Faculty").strip()
 
     if score is None:
         return jsonify({"success": False, "error": "'score' is required to evaluate a submission."}), 400
@@ -423,6 +513,9 @@ def evaluate_submission_route(submission_id):
 @app.route("/api/interventions", methods=["GET"])
 def list_interventions():
     """Retrieves faculty feedback, assigned support actions, and student 1-to-1 help requests."""
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         student_id = request.args.get("student_id")
         course_code = request.args.get("course_code")
@@ -443,7 +536,15 @@ def create_intervention_route():
     - Faculty sending feedback or assigning targeted practice to a specific student
     - Student requesting 1-to-1 help or office hours for a course/weak topic
     """
-    payload = request.get_json(silent=True) or {}
+    user, err_resp = require_api_auth(["student", "faculty"])
+    if err_resp:
+        return err_resp
+
+    payload = dict(request.get_json(silent=True) or {})
+    if str(user.get("role", "")).lower() == "student":
+        payload["initiated_by"] = "student"
+        payload.pop("faculty_response", None)
+
     student_id = payload.get("student_id")
     message = (payload.get("message") or payload.get("details") or "").strip()
 
@@ -470,14 +571,11 @@ def create_intervention_route():
 @app.route("/api/interventions/<intervention_id>/respond", methods=["POST", "PATCH", "PUT"])
 def respond_intervention_route(intervention_id):
     """Allows faculty to respond to a student help request or update office-hours booking status."""
-    payload = request.get_json(silent=True) or {}
-    role = (payload.get("role") or "faculty").strip().lower()
-    if role == "student" and "faculty_response" in payload:
-        return jsonify({
-            "success": False,
-            "error": "Unauthorized: Students cannot author faculty intervention responses."
-        }), 403
+    _, err_resp = require_api_auth(["faculty"])
+    if err_resp:
+        return err_resp
 
+    payload = request.get_json(silent=True) or {}
     try:
         updated = db_service.update_intervention(intervention_id, payload)
         if not updated:
@@ -498,6 +596,9 @@ def respond_intervention_route(intervention_id):
 @app.route("/api/course-hub", methods=["GET"])
 def get_course_hub():
     """Returns courses, faculty study materials, announcements, and assignments."""
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         course_code = request.args.get("course_code")
         student_id = request.args.get("student_id")
@@ -520,6 +621,9 @@ def get_course_hub():
 
 @app.route("/api/course-materials", methods=["GET"])
 def list_course_materials():
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         course_code = request.args.get("course_code")
         materials = db_service.get_course_materials(course_code=course_code)
@@ -530,11 +634,11 @@ def list_course_materials():
 
 @app.route("/api/course-materials", methods=["POST"])
 def create_course_material_route():
-    payload = request.get_json(silent=True) or {}
-    role = (payload.get("role") or "faculty").strip().lower()
-    if role == "student":
-        return jsonify({"success": False, "error": "Unauthorized: Only faculty can upload course materials."}), 403
+    _, err_resp = require_api_auth(["faculty"])
+    if err_resp:
+        return err_resp
 
+    payload = request.get_json(silent=True) or {}
     try:
         created = db_service.create_course_material(payload)
         return jsonify({
@@ -550,6 +654,9 @@ def create_course_material_route():
 
 @app.route("/api/announcements", methods=["GET"])
 def list_announcements():
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     try:
         course_code = request.args.get("course_code")
         announcements = db_service.get_announcements(course_code=course_code)
@@ -560,11 +667,11 @@ def list_announcements():
 
 @app.route("/api/announcements", methods=["POST"])
 def create_announcement_route():
-    payload = request.get_json(silent=True) or {}
-    role = (payload.get("role") or "faculty").strip().lower()
-    if role == "student":
-        return jsonify({"success": False, "error": "Unauthorized: Only faculty can publish course announcements."}), 403
+    _, err_resp = require_api_auth(["faculty"])
+    if err_resp:
+        return err_resp
 
+    payload = request.get_json(silent=True) or {}
     try:
         created = db_service.create_announcement(payload)
         return jsonify({
@@ -588,6 +695,9 @@ def get_admin_overview():
     Returns real database-backed platform governance metrics and registered user directory.
     Never fabricates user counts or fake accounts.
     """
+    _, err_resp = require_api_auth(["admin"])
+    if err_resp:
+        return err_resp
     try:
         users = db_service.get_all_users()
         students = [u for u in users if u["role"] == "Student"]
@@ -629,6 +739,9 @@ def get_admin_overview():
 @app.route("/api/admin/users/status", methods=["POST", "PATCH", "PUT"])
 def update_admin_user_status():
     """Allows administrators to toggle a user's account status (Active / Suspended) in Supabase."""
+    _, err_resp = require_api_auth(["admin"])
+    if err_resp:
+        return err_resp
     payload = request.get_json(silent=True) or {}
     role = payload.get("role")
     record_id = payload.get("record_id")
@@ -659,6 +772,9 @@ def analyze_performance():
     Analyzes student submissions and produces weak topics + recommendations.
     Accepts { "student_id": 1 } or { "submissions": [...] }
     """
+    _, err_resp = require_api_auth(["student", "faculty", "admin"])
+    if err_resp:
+        return err_resp
     payload = request.get_json(silent=True) or {}
     student_id = payload.get("student_id")
     custom_subs = payload.get("submissions")
@@ -699,6 +815,10 @@ def study_assistant_chat():
     Accepts { "message": "...", "history": [...], "previous_interaction_id": "...", "student_id": 1 }
     and returns the real Gemini-generated response.
     """
+    _, err_resp = require_api_auth(["student"])
+    if err_resp:
+        return err_resp
+
     if not request.is_json:
         return jsonify({
             "success": False,
@@ -800,47 +920,47 @@ EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 @app.route("/auth/login", methods=["POST"])
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
-    """User login endpoint querying Supabase records when available."""
+    """
+    Authenticates a user by email and password against Supabase records and
+    environment-configured Admin/Faculty credentials, creating a server-side session.
+    """
     payload = request.get_json(silent=True) or {}
-    email = payload.get("email", "").strip().lower()
-    password = payload.get("password", "")
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
 
     if not email or not password:
         return jsonify({"success": False, "message": "Missing email or password."}), 400
 
-    # Check if user exists in Supabase students / faculty / admins tables
+    # Ensure environment-configured Admin/Faculty accounts are synchronized
+    admin_env_email = (os.getenv("ADMIN_EMAIL") or "admin@edunexus.com").strip().lower()
+    faculty_env_email = (os.getenv("FACULTY_EMAIL") or "faculty@edunexus.com").strip().lower()
+    if email in (admin_env_email, faculty_env_email) and email not in db_service._password_hashes:
+        db_service.ensure_configured_accounts()
+
     existing_user = db_service.get_user_by_email(email)
     stored_hash = db_service.get_password_hash(email)
-    if stored_hash and not check_password_hash(stored_hash, password):
+
+    if not existing_user or not stored_hash or not check_password_hash(stored_hash, password):
         return jsonify({"success": False, "message": "Invalid email or password."}), 401
 
-    if existing_user:
-        if str(existing_user.get("status", "Active")).lower() == "suspended":
-            return jsonify({"success": False, "message": "This account has been suspended by an administrator."}), 403
-        role = existing_user.get("role", "student")
-        user_data = {
-            "id": existing_user.get("id"),
-            "fullName": existing_user.get("fullName") or existing_user.get("name"),
-            "name": existing_user.get("name") or existing_user.get("fullName"),
-            "email": existing_user.get("email", email),
-            "role": role,
-            "department": existing_user.get("department") or "Computer Science",
-            "course": existing_user.get("course") or "Data Structures"
-        }
-    else:
-        role = "faculty" if "faculty" in email else ("admin" if "admin" in email else "student")
-        name = email.split("@")[0].replace(".", " ").title()
-        # Map known quick-fill demo student to ID 1 so demo testing still resolves cleanly
-        fallback_id = 1 if email == "student.demo@edunexus.edu" else f"usr_{abs(hash(email)) % 100000:05d}"
-        user_data = {
-            "id": fallback_id,
-            "fullName": name,
-            "name": name,
-            "email": email,
-            "role": role,
-            "department": "Computer Science",
-            "course": "Data Structures"
-        }
+    if str(existing_user.get("status", "Active")).lower() == "suspended":
+        return jsonify({"success": False, "message": "This account has been suspended by an administrator."}), 403
+
+    role = str(existing_user.get("role", "student")).strip().lower()
+    redirect_url = DASHBOARD_BY_ROLE.get(role, "/student-dashboard")
+
+    user_data = {
+        "id": existing_user.get("id"),
+        "fullName": existing_user.get("fullName") or existing_user.get("name"),
+        "name": existing_user.get("name") or existing_user.get("fullName"),
+        "email": existing_user.get("email", email),
+        "role": role,
+        "department": existing_user.get("department") or "Computer Science",
+        "course": existing_user.get("course") or "Data Structures"
+    }
+
+    session.clear()
+    session["user"] = user_data
 
     return jsonify({
         "success": True,
@@ -848,6 +968,7 @@ def auth_login():
         "data": {
             "token": f"jwt_live_{int(datetime.now().timestamp())}",
             "expiresAt": int(datetime.now().timestamp()) + 86400,
+            "redirectUrl": redirect_url,
             "user": user_data
         }
     }), 200
@@ -857,14 +978,16 @@ def auth_login():
 @app.route("/api/auth/register", methods=["POST"])
 def auth_register():
     """
-    User registration endpoint that validates fields, hashes the password,
-    and saves the new account into Supabase PostgreSQL (students or faculty table).
+    User registration endpoint:
+    - Public registration only allows 'student' accounts (saved in public.students).
+    - 'faculty' accounts can only be created when an authenticated Admin is logged in.
+    - 'admin' registration is never permitted through the registration endpoint.
     """
     payload = request.get_json(silent=True) or {}
     full_name = (payload.get("fullName") or payload.get("name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
     password = payload.get("password") or ""
-    role = (payload.get("role") or "").strip().lower()
+    role = (payload.get("role") or "student").strip().lower()
     department = (payload.get("department") or "").strip() or None
 
     if not full_name or not email or not password or not role:
@@ -888,11 +1011,19 @@ def auth_register():
             "message": "Admin registration is not permitted through public portal."
         }), 403
 
+    if role == "faculty":
+        session_user = get_session_user()
+        if not session_user or str(session_user.get("role", "")).lower() != "admin":
+            return jsonify({
+                "success": False,
+                "message": "Faculty accounts must be created or approved by an administrator. Public registration is only open to students."
+            }), 403
+
     if role not in ("student", "faculty"):
         return jsonify({
             "success": False,
-            "message": "Role must be either 'student' or 'faculty'."
-        }), 400
+            "message": "Public registration only supports the 'student' role."
+        }), 403
 
     if len(password) < 8:
         return jsonify({
@@ -914,6 +1045,7 @@ def auth_register():
             "success": True,
             "message": "Registration successful. Please log in.",
             "data": {
+                "redirectUrl": "/login",
                 "user": created_user
             }
         }), 201
@@ -942,32 +1074,26 @@ def auth_register():
 @app.route("/auth/me", methods=["GET"])
 @app.route("/api/auth/me", methods=["GET"])
 def auth_me():
-    """Current session info."""
-    email = (request.args.get("email") or "").strip().lower()
-    if email:
-        user = db_service.get_user_by_email(email)
-        if user:
-            return jsonify({"success": True, "data": user}), 200
+    """Returns current authenticated session user info."""
+    session_user = get_session_user()
+    if not session_user:
+        return jsonify({
+            "success": False,
+            "message": "Authentication required. Please log in."
+        }), 401
 
-    students = db_service.get_students()
-    first_student = students[0] if students else {"id": 1, "name": "Student", "email": ""}
+    refreshed = db_service.get_user_by_email(session_user.get("email", ""))
     return jsonify({
         "success": True,
-        "data": {
-            "id": first_student.get("id", "usr_active_session"),
-            "fullName": first_student.get("name", "Student"),
-            "name": first_student.get("name", "Student"),
-            "email": first_student.get("email", ""),
-            "role": "student",
-            "course": first_student.get("course", "Data Structures")
-        }
+        "data": refreshed or session_user
     }), 200
 
 
 @app.route("/auth/logout", methods=["POST"])
 @app.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
-    """Invalidate session."""
+    """Invalidates the server-side Flask session."""
+    session.clear()
     return jsonify({"success": True, "message": "Session invalidated."}), 200
 
 
@@ -993,16 +1119,40 @@ def register_view():
 
 @app.route("/student-dashboard", methods=["GET"])
 def student_dashboard_view():
+    user = get_session_user()
+    if not user:
+        return redirect(url_for("login_view"))
+    if str(user.get("role", "")).lower() != "student":
+        return jsonify({
+            "success": False,
+            "error": "Forbidden: Only students are authorized to access the Student Dashboard."
+        }), 403
     return render_template("student-dashboard.html")
 
 
 @app.route("/faculty-dashboard", methods=["GET"])
 def faculty_dashboard_view():
+    user = get_session_user()
+    if not user:
+        return redirect(url_for("login_view"))
+    if str(user.get("role", "")).lower() != "faculty":
+        return jsonify({
+            "success": False,
+            "error": "Forbidden: Only faculty members are authorized to access the Faculty Dashboard."
+        }), 403
     return render_template("faculty-dashboard.html")
 
 
 @app.route("/admin-dashboard", methods=["GET"])
 def admin_dashboard_view():
+    user = get_session_user()
+    if not user:
+        return redirect(url_for("login_view"))
+    if str(user.get("role", "")).lower() != "admin":
+        return jsonify({
+            "success": False,
+            "error": "Forbidden: Only administrators are authorized to access the Admin Dashboard."
+        }), 403
     return render_template("admin-dashboard.html")
 
 

@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_FILE_PATH = BASE_DIR / ".env"
@@ -157,6 +158,7 @@ class DatabaseService:
         self._password_hashes: Dict[str, str] = {}
 
         self._init_connection()
+        self.ensure_configured_accounts()
 
     def _load_credentials(self) -> None:
         """Reloads .env from project root and extracts normalized Supabase credentials."""
@@ -351,6 +353,122 @@ class DatabaseService:
         except Exception:
             return False
 
+    def _sync_mock_configured_accounts(self) -> None:
+        """Ensures configured ADMIN_EMAIL and FACULTY_EMAIL exist in the in-memory mock store with hashed passwords."""
+        if self._mock_data is None:
+            return
+
+        admin_email = _clean_env_value(os.getenv("ADMIN_EMAIL") or "admin@edunexus.com").lower()
+        admin_password = _clean_env_value(os.getenv("ADMIN_PASSWORD") or os.getenv("EDUNEXUS_ADMIN_PASSWORD") or "")
+        faculty_email = _clean_env_value(os.getenv("FACULTY_EMAIL") or "faculty@edunexus.com").lower()
+        faculty_password = _clean_env_value(os.getenv("FACULTY_PASSWORD") or "")
+
+        if admin_email and admin_password:
+            if admin_email not in self._password_hashes:
+                self._password_hashes[admin_email] = generate_password_hash(admin_password)
+            admins_list = self._mock_data.setdefault("admins", [])
+            existing_adm = next(
+                (a for a in admins_list if str(a.get("email", "")).strip().lower() == admin_email),
+                None
+            )
+            if existing_adm is None:
+                new_id = max([int(a.get("id", 0)) for a in admins_list] + [0]) + 1
+                admins_list.append({
+                    "id": new_id,
+                    "full_name": "System Administrator",
+                    "email": admin_email,
+                    "status": "Active",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+
+        if faculty_email and faculty_password:
+            if faculty_email not in self._password_hashes:
+                self._password_hashes[faculty_email] = generate_password_hash(faculty_password)
+            faculty_list = self._mock_data.setdefault("faculty", [])
+            existing_fac = next(
+                (f for f in faculty_list if str(f.get("email", "")).strip().lower() == faculty_email),
+                None
+            )
+            if existing_fac is None:
+                new_id = max([int(f.get("id", 0)) for f in faculty_list] + [0]) + 1
+                faculty_list.append({
+                    "id": new_id,
+                    "full_name": "Dr. Sarah Mitchell",
+                    "email": faculty_email,
+                    "department": "Computer Science",
+                    "status": "Active",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+
+    def ensure_configured_accounts(self) -> None:
+        """
+        Ensures the environment-configured Admin (ADMIN_EMAIL / ADMIN_PASSWORD)
+        and Faculty (FACULTY_EMAIL / FACULTY_PASSWORD) accounts exist in Supabase
+        with secure password hashes and without creating duplicate records.
+        """
+        self._load_credentials()
+        admin_email = _clean_env_value(os.getenv("ADMIN_EMAIL") or "admin@edunexus.com").lower()
+        admin_password = _clean_env_value(os.getenv("ADMIN_PASSWORD") or os.getenv("EDUNEXUS_ADMIN_PASSWORD") or "")
+        faculty_email = _clean_env_value(os.getenv("FACULTY_EMAIL") or "faculty@edunexus.com").lower()
+        faculty_password = _clean_env_value(os.getenv("FACULTY_PASSWORD") or "")
+
+        if admin_email and admin_password:
+            admin_hash = generate_password_hash(admin_password)
+            self._password_hashes[admin_email] = admin_hash
+        else:
+            admin_hash = None
+
+        if faculty_email and faculty_password:
+            faculty_hash = generate_password_hash(faculty_password)
+            self._password_hashes[faculty_email] = faculty_hash
+        else:
+            faculty_hash = None
+
+        self._get_mock_data()
+        self._sync_mock_configured_accounts()
+
+        if not self._ensure_connection() or not self.client or self._is_testing_mode():
+            return
+
+        if admin_email and admin_hash:
+            try:
+                adm_res = self.client.table("admins").select("*").eq("email", admin_email).execute()
+                if adm_res.data and len(adm_res.data) > 0:
+                    row = adm_res.data[0]
+                    self.client.table("admins").update({
+                        "password_hash": admin_hash,
+                        "status": row.get("status") or "Active"
+                    }).eq("id", row["id"]).execute()
+                else:
+                    self.client.table("admins").insert({
+                        "full_name": "System Administrator",
+                        "email": admin_email,
+                        "password_hash": admin_hash,
+                        "status": "Active"
+                    }).execute()
+            except Exception:
+                pass
+
+        if faculty_email and faculty_hash:
+            try:
+                fac_res = self.client.table("faculty").select("*").eq("email", faculty_email).execute()
+                if fac_res.data and len(fac_res.data) > 0:
+                    row = fac_res.data[0]
+                    self.client.table("faculty").update({
+                        "password_hash": faculty_hash,
+                        "status": row.get("status") or "Active"
+                    }).eq("id", row["id"]).execute()
+                else:
+                    self.client.table("faculty").insert({
+                        "full_name": "Dr. Sarah Mitchell",
+                        "email": faculty_email,
+                        "department": "Computer Science",
+                        "password_hash": faculty_hash,
+                        "status": "Active"
+                    }).execute()
+            except Exception:
+                pass
+
     def _get_mock_data(self) -> Dict[str, Any]:
         """Loads synthetic records from mock_data.json as a fallback."""
         if self._mock_data is None:
@@ -371,6 +489,7 @@ class DatabaseService:
                     "announcements": [],
                     "interventions": []
                 }
+            self._sync_mock_configured_accounts()
         return self._mock_data
 
     def get_status(self) -> Dict[str, Any]:

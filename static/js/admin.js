@@ -418,30 +418,35 @@ function initSidebarToggle() {
  * Role Switcher & Logout Navigation
  */
 function initRoleSwitcher() {
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+
   const switcher = document.getElementById('roleSwitcherSelect');
   if (switcher) {
+    switcher.value = 'admin';
     switcher.addEventListener('change', () => {
-      const targetRole = switcher.value;
-      if (targetRole === 'student') {
-        window.location.href = '/student-dashboard';
-      } else if (targetRole === 'faculty') {
-        window.location.href = '/faculty-dashboard';
-      } else if (targetRole === 'admin') {
-        window.location.href = '/admin-dashboard';
+      if (switcher.value !== 'admin') {
+        switcher.value = 'admin';
+        if (window.showToast) {
+          window.showToast('Role access is restricted to your authenticated Administrator session.', 'error');
+        }
       }
     });
   }
 
   const logoutButtons = document.querySelectorAll('[data-action="logout"]');
   logoutButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       if (window.EduNexusAPI) {
-        window.EduNexusAPI.logout();
+        await window.EduNexusAPI.logout();
       }
       window.showToast("Logged out of administrative session.", "info");
       setTimeout(() => {
-        window.location.href = '/login';
-      }, 500);
+        window.location.replace('/login');
+      }, 300);
     });
   });
 }

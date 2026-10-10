@@ -12,22 +12,19 @@ const API_CONFIG = {
   demoAccounts: {
     student: {
       email: 'aanya.demo@example.com',
-      password: 'DemoStudent@2026',
       name: 'Aanya Patel',
       role: 'student',
       course: 'Data Structures'
     },
     faculty: {
-      email: 'faculty.demo@edunexus.edu',
-      password: 'DemoFaculty@2026',
+      email: 'faculty@edunexus.com',
       name: 'Dr. Sarah Mitchell',
       role: 'faculty',
       department: 'Department of Computer Science',
       courses: ['Data Structures & Algorithms']
     },
     admin: {
-      email: 'admin.demo@edunexus.edu',
-      password: 'DemoAdmin@2026',
+      email: 'admin@edunexus.com',
       name: 'System Administrator',
       role: 'admin',
       scope: 'Global Institution'
@@ -84,6 +81,7 @@ const EduNexusAPI = {
   async login(credentials) {
     const response = await fetch(`${API_CONFIG.baseUrl}/auth/login`, {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials)
     });
@@ -108,6 +106,7 @@ const EduNexusAPI = {
     try {
       response = await fetch(`${API_CONFIG.baseUrl}/auth/register`, {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData)
       });
@@ -150,11 +149,17 @@ const EduNexusAPI = {
   },
 
   /**
-   * Clear session on logout
+   * Clear session on logout (invalidating both server-side Flask session and client storage)
    */
-  logout() {
+  async logout() {
     try {
       sessionStorage.removeItem('edunexus_session');
+    } catch (e) {}
+    try {
+      await fetch(`${API_CONFIG.baseUrl}/auth/logout`, {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
     } catch (e) {}
   },
 

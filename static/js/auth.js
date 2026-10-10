@@ -220,9 +220,11 @@ function initLoginForm() {
       const userObj = response.data.user || {};
       const role = (userObj.role || 'student').toLowerCase();
       const displayName = userObj.name || userObj.fullName || 'User';
-      let targetDashboard = '/student-dashboard';
-      if (role === 'faculty') targetDashboard = '/faculty-dashboard';
-      else if (role === 'admin') targetDashboard = '/admin-dashboard';
+      let targetDashboard = response.data.redirectUrl || '/student-dashboard';
+      if (!response.data.redirectUrl) {
+        if (role === 'faculty') targetDashboard = '/faculty-dashboard';
+        else if (role === 'admin') targetDashboard = '/admin-dashboard';
+      }
 
       if (formAlert) {
         formAlert.className = 'alert alert-success is-visible';
@@ -342,14 +344,14 @@ function initRegisterForm() {
     const passVal = passwordInput.value;
     const confirmVal = confirmPasswordInput.value;
 
-    // Check role selection (strictly student or faculty)
+    // Public registration is strictly for students
     const selectedRoleElem = registerForm.querySelector('input[name="role"]:checked');
-    const roleVal = selectedRoleElem ? selectedRoleElem.value : null;
+    const roleVal = selectedRoleElem ? selectedRoleElem.value : 'student';
 
-    if (!roleVal || (roleVal !== 'student' && roleVal !== 'faculty')) {
+    if (roleVal !== 'student') {
       const roleErrorElem = document.getElementById('regRoleError');
       if (roleErrorElem) {
-        roleErrorElem.textContent = 'Please select your role: Student or Faculty.';
+        roleErrorElem.textContent = 'Public registration is open to Student accounts only.';
         roleErrorElem.classList.add('is-visible');
       }
       hasError = true;
@@ -405,7 +407,7 @@ function initRegisterForm() {
         fullName: nameVal,
         email: emailVal,
         password: passVal,
-        role: roleVal
+        role: 'student'
       });
 
       const createdUser = response && response.data && response.data.user;
@@ -493,7 +495,7 @@ function initRoleCards() {
 }
 
 /**
- * Initialize Demo Quick-Fill credentials buttons on login page
+ * Initialize Quick-Fill role email buttons on login page (never stores plaintext passwords in JS)
  */
 function initDemoQuickFill() {
   const quickfillButtons = document.querySelectorAll('[data-demo-role]');
@@ -508,10 +510,9 @@ function initDemoQuickFill() {
       const account = window.API_CONFIG && window.API_CONFIG.demoAccounts[role];
       if (account) {
         emailInput.value = account.email;
-        passwordInput.value = account.password;
         clearFieldError('loginEmail', 'loginEmailError');
-        clearFieldError('loginPassword', 'loginPasswordError');
-        window.showToast(`Filled credentials for ${account.name} (${role.toUpperCase()})`, 'info');
+        passwordInput.focus();
+        window.showToast(`Filled ${role.toUpperCase()} email (${account.email}). Enter your password to sign in.`, 'info');
       }
     });
   });
