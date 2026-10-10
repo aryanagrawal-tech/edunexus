@@ -25,6 +25,12 @@ from services.analytics import (
     ALLOWED_TOPICS
 )
 from services.recommendations import generate_recommendations
+from services.study_assistant import (
+    generate_study_assistant_reply,
+    StudyAssistantError,
+    is_gemini_configured,
+    DEFAULT_GEMINI_MODEL,
+)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -274,6 +280,106 @@ def analyze_performance():
             "recommendations": recommendations
         }
     }), 200
+
+
+@app.route("/study-assistant/chat", methods=["POST"])
+@app.route("/api/study-assistant/chat", methods=["POST"])
+def study_assistant_chat():
+    """
+    AI Study Assistant chat endpoint powered by the official Google Gen AI SDK (Gemini).
+    Accepts { "message": "...", "history": [...], "previous_interaction_id": "...", "student_id": 1 }
+    and returns the real Gemini-generated response.
+    """
+    if not request.is_json:
+        return jsonify({
+            "success": False,
+            "error": "Request body must be valid JSON.",
+            "error_code": "INVALID_REQUEST"
+        }), 400
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({
+            "success": False,
+            "error": "Malformed JSON payload. Expected a JSON object.",
+            "error_code": "INVALID_REQUEST"
+        }), 400
+
+    raw_message = payload.get("message")
+    if not isinstance(raw_message, str) or not raw_message.strip():
+        return jsonify({
+            "success": False,
+            "error": "Please enter a non-empty message for the AI Study Assistant.",
+            "error_code": "EMPTY_MESSAGE"
+        }), 400
+
+    history = payload.get("history")
+    if history is not None and not isinstance(history, list):
+        return jsonify({
+            "success": False,
+            "error": "'history' must be a list of conversation messages.",
+            "error_code": "INVALID_HISTORY"
+        }), 400
+
+    previous_interaction_id = payload.get("previous_interaction_id")
+    if previous_interaction_id is not None and not isinstance(previous_interaction_id, str):
+        previous_interaction_id = None
+
+    # Attach verified student performance context if provided or look up by student_id
+    student_context = payload.get("student_context") if isinstance(payload.get("student_context"), dict) else None
+    student_id = payload.get("student_id")
+    if student_context is None and student_id is not None:
+        try:
+            student = db_service.get_student_by_id(student_id)
+            if student:
+                subs = db_service.get_submissions(student_id=student["id"])
+                perf = analyze_student_performance(student, subs)
+                student_context = {
+                    "profile": {
+                        "id": student["id"],
+                        "name": student["name"],
+                        "course": "Data Structures",
+                    },
+                    "metrics": {
+                        "overall_score": perf["overall_score"],
+                        "completion_rate": perf["completion_rate"],
+                        "total_submissions": perf["total_submissions"],
+                    },
+                    "topic_scores": perf["topic_scores"],
+                    "weak_topics": perf["weak_topics"],
+                }
+        except Exception:
+            student_context = None
+
+    try:
+        result = generate_study_assistant_reply(
+            message=raw_message,
+            history=history,
+            previous_interaction_id=previous_interaction_id,
+            student_context=student_context,
+        )
+        return jsonify({
+            "success": True,
+            "data": result
+        }), 200
+    except ValueError as val_err:
+        return jsonify({
+            "success": False,
+            "error": str(val_err),
+            "error_code": "VALIDATION_ERROR"
+        }), 400
+    except StudyAssistantError as sa_err:
+        return jsonify({
+            "success": False,
+            "error": str(sa_err),
+            "error_code": sa_err.error_code
+        }), sa_err.status_code
+    except Exception:
+        return jsonify({
+            "success": False,
+            "error": "An unexpected error occurred while contacting the AI Study Assistant.",
+            "error_code": "INTERNAL_ERROR"
+        }), 500
 
 
 # ==========================================

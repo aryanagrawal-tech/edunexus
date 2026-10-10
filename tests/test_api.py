@@ -587,3 +587,208 @@ def test_ai_study_assistant_responsive_layout_css(client):
     assert "@media (max-width: 768px)" in components_css
 
 
+def test_study_assistant_chat_validation(client):
+    """Validates empty messages and malformed requests on /api/study-assistant/chat."""
+    # Non-JSON request
+    res_non_json = client.post("/api/study-assistant/chat", data="not json")
+    assert res_non_json.status_code == 400
+    assert res_non_json.get_json()["error_code"] == "INVALID_REQUEST"
+
+    # Empty message
+    res_empty = client.post("/api/study-assistant/chat", json={"message": "   "})
+    assert res_empty.status_code == 400
+    assert res_empty.get_json()["error_code"] == "EMPTY_MESSAGE"
+
+    # Malformed history
+    res_bad_history = client.post(
+        "/api/study-assistant/chat",
+        json={"message": "Explain recursion", "history": "not-a-list"}
+    )
+    assert res_bad_history.status_code == 400
+    assert res_bad_history.get_json()["error_code"] == "INVALID_HISTORY"
+
+
+def test_study_assistant_chat_missing_api_key(client, monkeypatch):
+    """Returns 503 MISSING_API_KEY when GEMINI_API_KEY is unset or set to placeholder."""
+    import services.study_assistant as sa
+
+    monkeypatch.setattr(sa, "_get_api_key", lambda: "")
+    res = client.post(
+        "/api/study-assistant/chat",
+        json={"message": "Explain binary search trees in Python"}
+    )
+    assert res.status_code == 503
+    data = res.get_json()
+    assert data["success"] is False
+    assert data["error_code"] == "MISSING_API_KEY"
+    assert "GEMINI_API_KEY" in data["error"]
+
+
+def test_study_assistant_chat_success_and_context(client, monkeypatch):
+    """Verifies /api/study-assistant/chat invokes Gemini Interactions API and returns real model output."""
+    import app as flask_app
+
+    captured_calls = []
+
+    class DummyInteraction:
+        id = "int_gemini_test_001"
+        output_text = (
+            "A **Binary Search Tree (BST)** is a hierarchical data structure where each node's "
+            "left subtree contains smaller keys and right subtree contains larger keys.\n\n"
+            "```python\nclass Node:\n    def __init__(self, key):\n        self.key = key\n```"
+        )
+
+    def fake_generate_reply(message, history=None, previous_interaction_id=None, student_context=None):
+        captured_calls.append({
+            "message": message,
+            "history": history,
+            "previous_interaction_id": previous_interaction_id,
+            "student_context": student_context,
+        })
+        return {
+            "reply": DummyInteraction.output_text,
+            "model": "gemini-3.8-flash",
+            "interaction_id": DummyInteraction.id,
+            "grounded_in_student_data": bool(student_context),
+        }
+
+    monkeypatch.setattr(flask_app, "generate_study_assistant_reply", fake_generate_reply)
+
+    res = client.post(
+        "/api/study-assistant/chat",
+        json={
+            "message": "Explain binary search trees in Python",
+            "history": [{"role": "user", "content": "Hi"}],
+            "previous_interaction_id": "int_prev_000",
+            "student_id": 1,
+        }
+    )
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body["success"] is True
+    assert "Binary Search Tree" in body["data"]["reply"]
+    assert body["data"]["model"] == "gemini-3.8-flash"
+    assert body["data"]["interaction_id"] == "int_gemini_test_001"
+    assert body["data"]["grounded_in_student_data"] is True
+    assert len(captured_calls) == 1
+    assert captured_calls[0]["student_context"]["profile"]["name"] == "Aanya Patel"
+
+
+def test_study_assistant_service_sdk_and_error_handling(monkeypatch):
+    """Tests generate_study_assistant_reply with a mocked google-genai Client for success, quota, and network errors."""
+    import services.study_assistant as sa
+    import httpx
+
+    monkeypatch.setattr(sa, "_get_api_key", lambda: "test_secret_gemini_key_12345")
+
+    class FakeInteraction:
+        id = "int_live_99"
+        output_text = "Recursion is when a function calls itself with a smaller subproblem until reaching a base case."
+
+    class FakeInteractionsResource:
+        def __init__(self):
+            self.last_kwargs = None
+
+        def create(self, **kwargs):
+            self.last_kwargs = kwargs
+            return FakeInteraction()
+
+    class FakeClient:
+        def __init__(self):
+            self.interactions = FakeInteractionsResource()
+
+    fake_client = FakeClient()
+    result = sa.generate_study_assistant_reply(
+        message="What is recursion?",
+        history=[{"role": "user", "content": "Hello"}],
+        client_override=fake_client,
+    )
+    assert result["reply"].startswith("Recursion is when a function")
+    assert result["interaction_id"] == "int_live_99"
+    assert fake_client.interactions.last_kwargs["model"] == "gemini-3.5-flash-lite"
+    assert "Recent conversation context:" in fake_client.interactions.last_kwargs["input"]
+
+    # Quota error handling (and ensure API key is never leaked)
+    class QuotaClient:
+        class interactions:
+            @staticmethod
+            def create(**kwargs):
+                raise RuntimeError("429 RESOURCE_EXHAUSTED for key test_secret_gemini_key_12345")
+
+    try:
+        sa.generate_study_assistant_reply(message="Test quota", client_override=QuotaClient())
+        assert False, "Expected StudyAssistantQuotaError"
+    except sa.StudyAssistantQuotaError as qe:
+        assert "test_secret_gemini_key_12345" not in str(qe)
+        assert qe.status_code == 429
+        assert qe.error_code == "QUOTA_EXCEEDED"
+
+    # Timeout error handling (504 REQUEST_TIMEOUT)
+    class TimeoutClient:
+        class interactions:
+            @staticmethod
+            def create(**kwargs):
+                raise httpx.ReadTimeout("Timed out")
+
+    try:
+        sa.generate_study_assistant_reply(message="Test timeout", client_override=TimeoutClient())
+        assert False, "Expected StudyAssistantTimeoutError"
+    except sa.StudyAssistantTimeoutError as te:
+        assert te.status_code == 504
+        assert te.error_code == "REQUEST_TIMEOUT"
+
+    # Network connection error handling (503 NETWORK_ERROR)
+    class NetworkClient:
+        class interactions:
+            @staticmethod
+            def create(**kwargs):
+                raise httpx.ConnectError("Connection refused")
+
+    try:
+        sa.generate_study_assistant_reply(message="Test network", client_override=NetworkClient())
+        assert False, "Expected StudyAssistantNetworkError"
+    except sa.StudyAssistantNetworkError as ne:
+        assert ne.status_code == 503
+        assert ne.error_code == "NETWORK_ERROR"
+
+    # Authentication error handling (401 INVALID_API_KEY)
+    class AuthClient:
+        class interactions:
+            @staticmethod
+            def create(**kwargs):
+                raise RuntimeError("401 UNAUTHENTICATED: API_KEY_INVALID for test_secret_gemini_key_12345")
+
+    try:
+        sa.generate_study_assistant_reply(message="Test auth", client_override=AuthClient())
+        assert False, "Expected StudyAssistantAuthError"
+    except sa.StudyAssistantAuthError as ae:
+        assert "test_secret_gemini_key_12345" not in str(ae)
+        assert ae.status_code == 401
+        assert ae.error_code == "INVALID_API_KEY"
+
+    # Invalid model error handling (400 INVALID_MODEL)
+    class ModelClient:
+        class interactions:
+            @staticmethod
+            def create(**kwargs):
+                raise RuntimeError("404 Model not found")
+
+    try:
+        sa.generate_study_assistant_reply(message="Test model", client_override=ModelClient())
+        assert False, "Expected StudyAssistantModelError"
+    except sa.StudyAssistantModelError as me:
+        assert me.status_code == 400
+        assert me.error_code == "INVALID_MODEL"
+
+
+def test_frontend_student_js_uses_live_gemini_endpoint(client):
+    """Confirms static/js/student.js and static/js/api.js call /study-assistant/chat and do not use simulated AI responses."""
+    student_js = client.get("/static/js/student.js").get_data(as_text=True)
+    api_js = client.get("/static/js/api.js").get_data(as_text=True)
+
+    assert "sendStudyAssistantMessage" in api_js
+    assert "/study-assistant/chat" in api_js
+    assert "sendStudyAssistantMessage" in student_js
+    assert "function generateAIResponse" not in student_js
+
+

@@ -346,6 +346,46 @@ const EduNexusAPI = {
       body: JSON.stringify(payload)
     });
     return await res.json();
+  },
+
+  /**
+   * Send a student message to the Google Gemini AI Study Assistant endpoint.
+   * Never returns simulated/fake responses if the backend or Gemini API fails.
+   * @param {Object} payload - { message, history, previous_interaction_id, student_id }
+   * @returns {Promise<Object>}
+   */
+  async sendStudyAssistantMessage(payload) {
+    let response;
+    try {
+      response = await fetch(`${API_CONFIG.baseUrl}/study-assistant/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (networkErr) {
+      const err = new Error('Network error: Unable to reach the AI Study Assistant server. Please check your connection and try again.');
+      err.errorCode = 'NETWORK_ERROR';
+      throw err;
+    }
+
+    let result;
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      const err = new Error(`AI Study Assistant returned an unreadable response (HTTP ${response.status}).`);
+      err.errorCode = 'INVALID_RESPONSE';
+      err.status = response.status;
+      throw err;
+    }
+
+    if (!response.ok || !result || !result.success) {
+      const err = new Error((result && (result.error || result.message)) || 'The AI Study Assistant could not generate a response.');
+      err.errorCode = (result && result.error_code) || 'ASSISTANT_ERROR';
+      err.status = response.status;
+      throw err;
+    }
+
+    return result;
   }
 };
 

@@ -28,6 +28,12 @@ async function initStudentDashboard() {
       const res = await window.EduNexusAPI.getStudentDashboard(1);
       if (res && res.success && res.data && res.data.metrics) {
         const apiData = res.data;
+        window._verifiedStudentContext = {
+          profile: apiData.profile,
+          metrics: apiData.metrics,
+          topic_scores: apiData.topic_scores,
+          weak_topics: apiData.weak_topics
+        };
         overallScore = apiData.metrics.overall_score;
 
         const scoreCardElem = document.getElementById('studentStatOverallScore');
@@ -251,91 +257,221 @@ function renderStudyResources(resources) {
 }
 
 /**
- * AI Study Assistant UI & Interactive Responses
+ * Escape HTML special characters before formatting code blocks
+ */
+function escapeAssistantHtml(raw) {
+  return String(raw || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Format multiline text, fenced code blocks (```...```), inline code (`...`), and bold text (**...**) safely
+ */
+function formatAssistantMessageHtml(text) {
+  const escaped = escapeAssistantHtml(text);
+  const codeBlocks = [];
+
+  // Extract fenced code blocks first so inline formatting doesn't alter code
+  let processed = escaped.replace(/```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const token = `__CODE_BLOCK_${codeBlocks.length}__`;
+    const trimmedCode = code.replace(/\n$/, '');
+    codeBlocks.push(`<pre class="chat-code-block"><code>${trimmedCode}</code></pre>`);
+    return token;
+  });
+
+  // Inline code (`...`)
+  processed = processed.replace(/`([^`\n]+)`/g, '<code class="chat-inline-code">$1</code>');
+
+  // Bold (**...**)
+  processed = processed.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Restore fenced code blocks
+  codeBlocks.forEach((blockHtml, idx) => {
+    processed = processed.replace(`__CODE_BLOCK_${idx}__`, blockHtml);
+  });
+
+  return processed;
+}
+
+/**
+ * AI Study Assistant UI & Live Google Gemini Integration
  */
 function initAIAssistant() {
-  const data = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.student.aiAssistantKnowledge;
-  if (!data) return;
+  const data = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.student && window.EDUNEXUS_MOCK_DATA.student.aiAssistantKnowledge;
+  const suggestedPrompts = (data && Array.isArray(data.suggestedPrompts)) ? data.suggestedPrompts : [
+    "Explain Dijkstra's shortest path algorithm step-by-step",
+    "How do I determine if a database schema is in BCNF?",
+    "What are my weakest topics and how do I improve them?",
+    "Give me a quick 3-question quiz on Graph Traversal"
+  ];
 
   const chatMessages = document.getElementById('chatMessages');
   const chatForm = document.getElementById('chatForm');
   const chatInput = document.getElementById('chatInput');
   const chipsContainer = document.getElementById('promptChipsContainer');
+  const sendBtn = chatForm ? chatForm.querySelector('button[type="submit"]') : null;
 
   if (!chatMessages || !chatForm || !chatInput) return;
 
+  let isRequestPending = false;
+  const conversationHistory = [];
+  let previousInteractionId = null;
+
   // Render Prompt Chips
-  if (chipsContainer && data.suggestedPrompts) {
+  if (chipsContainer && suggestedPrompts.length > 0) {
     chipsContainer.innerHTML = '';
     const label = document.createElement('span');
     label.className = 'chip-label';
     label.textContent = 'Prompt Suggestions:';
     chipsContainer.appendChild(label);
 
-    data.suggestedPrompts.forEach(promptText => {
+    suggestedPrompts.forEach(promptText => {
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'prompt-chip';
       chip.textContent = promptText;
       chip.addEventListener('click', () => {
+        if (isRequestPending) return;
         handleUserMessage(promptText);
       });
       chipsContainer.appendChild(chip);
     });
   }
 
-  // Handle Form Submission
+  // Handle Form Submission (Send button and Enter key)
   chatForm.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (isRequestPending) return;
     const text = chatInput.value.trim();
-    if (!text) return;
+    if (!text) {
+      if (window.showToast) {
+        window.showToast('Please enter a question before sending.', 'info');
+      }
+      return;
+    }
     chatInput.value = '';
     handleUserMessage(text);
   });
 
-  function handleUserMessage(userText) {
-    appendMessage('user', userText);
-
-    // Scroll to bottom
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-
-    // Simulate AI typing delay
-    setTimeout(() => {
-      const response = generateAIResponse(userText, data.responses);
-      appendMessage('assistant', response);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }, 450);
+  function setPendingState(pending) {
+    isRequestPending = pending;
+    chatInput.disabled = pending;
+    if (sendBtn) {
+      sendBtn.disabled = pending;
+      sendBtn.setAttribute('aria-disabled', pending ? 'true' : 'false');
+      sendBtn.textContent = pending ? 'Sending...' : 'Send';
+    }
+    if (chipsContainer) {
+      chipsContainer.querySelectorAll('.prompt-chip').forEach(chip => {
+        chip.disabled = pending;
+      });
+    }
   }
 
-  function appendMessage(sender, text) {
+  function appendLoadingIndicator() {
     const msg = document.createElement('div');
-    msg.className = `chat-message chat-${sender}`;
+    msg.className = 'chat-message chat-assistant chat-loading-message';
+    msg.setAttribute('aria-label', 'AI Study Assistant is generating a response');
 
     const avatar = document.createElement('div');
     avatar.className = 'chat-avatar';
-    avatar.textContent = sender === 'user' ? 'AA' : 'AI';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = 'AI';
 
     const bubble = document.createElement('div');
-    bubble.className = 'chat-bubble';
-    bubble.textContent = text;
+    bubble.className = 'chat-bubble chat-bubble-loading';
+    bubble.innerHTML = '<span class="chat-loading-dot"></span><span>Generating response with Gemini...</span>';
 
     msg.appendChild(avatar);
     msg.appendChild(bubble);
     chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return msg;
   }
 
-  function generateAIResponse(query, knowledge) {
-    const q = query.toLowerCase();
-    if (q.includes('dijkstra') || q.includes('shortest path') || q.includes('graph')) {
-      return knowledge.dijkstra;
-    } else if (q.includes('bcnf') || q.includes('normal') || q.includes('database')) {
-      return knowledge.bcnf;
-    } else if (q.includes('weak') || q.includes('improve') || q.includes('score')) {
-      return knowledge.weakest;
-    } else if (q.includes('quiz') || q.includes('question') || q.includes('test')) {
-      return knowledge.quiz;
+  function appendMessage(sender, text, isError = false) {
+    const msg = document.createElement('div');
+    msg.className = `chat-message chat-${sender === 'user' ? 'user' : 'assistant'}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'chat-avatar';
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.textContent = sender === 'user' ? 'AA' : 'AI';
+
+    const bubble = document.createElement('div');
+    bubble.className = `chat-bubble${isError ? ' chat-bubble-error' : ''}`;
+
+    if (sender === 'user' || isError) {
+      bubble.textContent = text;
+    } else {
+      bubble.innerHTML = formatAssistantMessageHtml(text);
     }
-    return `Regarding "${query}":\n\nI recommend reviewing the lecture slides and practicing with the interactive exercises in your recommendations tab. Would you like me to generate a 3-question practice drill on this topic?`;
+
+    msg.appendChild(avatar);
+    msg.appendChild(bubble);
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  async function handleUserMessage(userText) {
+    if (isRequestPending) return;
+
+    appendMessage('user', userText);
+    setPendingState(true);
+    const loadingElem = appendLoadingIndicator();
+
+    try {
+      if (!window.EduNexusAPI || typeof window.EduNexusAPI.sendStudyAssistantMessage !== 'function') {
+        throw new Error('AI Study Assistant API client is not initialized.');
+      }
+
+      const response = await window.EduNexusAPI.sendStudyAssistantMessage({
+        message: userText,
+        history: conversationHistory.slice(-8),
+        previous_interaction_id: previousInteractionId,
+        student_context: window._verifiedStudentContext || null,
+        student_id: window._verifiedStudentContext ? null : 1
+      });
+
+      const replyText = response && response.data && response.data.reply;
+      if (!replyText) {
+        throw new Error('The AI Study Assistant returned an empty response. Please try again.');
+      }
+
+      if (loadingElem && loadingElem.parentNode) {
+        loadingElem.parentNode.removeChild(loadingElem);
+      }
+
+      appendMessage('assistant', replyText);
+
+      conversationHistory.push({ role: 'user', content: userText });
+      conversationHistory.push({ role: 'assistant', content: replyText });
+      if (response.data.interaction_id) {
+        previousInteractionId = response.data.interaction_id;
+      }
+    } catch (err) {
+      if (loadingElem && loadingElem.parentNode) {
+        loadingElem.parentNode.removeChild(loadingElem);
+      }
+      // Preserve the user's message in the input box so they can retry without typing it again
+      if (!chatInput.value.trim()) {
+        chatInput.value = userText;
+      }
+      const friendlyError = (err && err.message)
+        ? err.message
+        : 'Unable to generate a response from Google Gemini right now. Please try again.';
+      appendMessage('assistant', friendlyError, true);
+      if (window.showToast) {
+        window.showToast(friendlyError, 'error');
+      }
+    } finally {
+      setPendingState(false);
+      chatInput.focus();
+    }
   }
 }
 
