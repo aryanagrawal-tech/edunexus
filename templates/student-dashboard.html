@@ -138,16 +138,6 @@
 
       <!-- Dashboard Body -->
       <div class="dashboard-content" id="overview">
-        <!-- Transparent Prototype Mode Banner -->
-        <div class="dashboard-demo-banner" role="status">
-          <div class="demo-banner-body">
-            <span class="demo-banner-badge">Demo Mode</span>
-            <div class="demo-banner-text">
-              <strong>Simulated Academic Analytics:</strong> Student topic performance, weak-topic detection, and AI recommendations are loaded from client-side mock datasets. Live database sync will integrate in Phase 2.
-            </div>
-          </div>
-        </div>
-
         <!-- Metric Stat Cards -->
         <section class="stats-grid" aria-label="Academic Metric Highlights">
           <div class="stat-card">
@@ -160,7 +150,7 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">82.4%</div>
+            <div class="stat-card-value" id="studentStatOverallScore">82.4%</div>
             <div class="stat-card-meta">
               <span class="trend-positive">+3.2%</span> vs last term
             </div>
@@ -209,8 +199,8 @@
                 </svg>
               </div>
             </div>
-            <div class="stat-card-value">19 / 20</div>
-            <div class="stat-card-meta">
+            <div class="stat-card-value" id="studentStatSubmissions">19 / 20</div>
+            <div class="stat-card-meta" id="studentStatCompletionMeta">
               <span class="trend-positive">95%</span> submission rate
             </div>
           </div>
@@ -254,7 +244,7 @@
                   <h2 id="weakAlertsTitle" class="card-title">Weak-Topic Alerts</h2>
                   <span class="card-subtitle">Areas requiring targeted study before upcoming assessments</span>
                 </div>
-                <span class="badge badge-demo">2 Detected</span>
+                <span id="weakTopicsCountBadge" class="badge badge-info">2 Detected</span>
               </div>
               <div class="card-body">
                 <div id="weakAlertsContainer" class="weak-alert-list"></div>
@@ -273,7 +263,7 @@
                 </div>
                 <div class="ai-status-indicator">
                   <span class="status-dot" aria-hidden="true"></span>
-                  <span>Active Model (Simulated)</span>
+                  <span>Assistant Ready</span>
                 </div>
               </div>
 

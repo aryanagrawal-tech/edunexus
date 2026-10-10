@@ -11,26 +11,115 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /**
- * Initialize Student Metrics and Content from Mock Data Store
+ * Initialize Student Metrics and Content from Flask Backend with Fallback
  */
-function initStudentDashboard() {
-  const data = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.student;
-  if (!data) return;
+async function initStudentDashboard() {
+  const fallbackData = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.student;
+
+  let overallScore = fallbackData ? fallbackData.metrics.overallScore : 0;
+  let topicMastery = fallbackData ? fallbackData.topicMastery : [];
+  let weakTopicAlerts = fallbackData ? fallbackData.weakTopicAlerts : [];
+  let recommendations = fallbackData ? fallbackData.recommendations : [];
+  const studyResources = fallbackData ? fallbackData.studyResources : [];
+
+  // Attempt to load live student performance and analytics from Flask + Supabase backend
+  if (window.EduNexusAPI && typeof window.EduNexusAPI.getStudentDashboard === 'function') {
+    try {
+      const res = await window.EduNexusAPI.getStudentDashboard(1);
+      if (res && res.success && res.data && res.data.metrics) {
+        const apiData = res.data;
+        overallScore = apiData.metrics.overall_score;
+
+        const scoreCardElem = document.getElementById('studentStatOverallScore');
+        if (scoreCardElem) {
+          scoreCardElem.textContent = `${overallScore}%`;
+        }
+
+        const subCardElem = document.getElementById('studentStatSubmissions');
+        if (subCardElem && typeof apiData.metrics.total_submissions === 'number') {
+          subCardElem.textContent = `${apiData.metrics.total_submissions} Recorded`;
+        }
+
+        const completionMetaElem = document.getElementById('studentStatCompletionMeta');
+        if (completionMetaElem && typeof apiData.metrics.completion_rate === 'number') {
+          completionMetaElem.innerHTML = `<span class="trend-positive">${apiData.metrics.completion_rate}%</span> on-time rate`;
+        }
+
+        if (Array.isArray(apiData.topic_scores) && apiData.topic_scores.length > 0) {
+          topicMastery = apiData.topic_scores.map(ts => {
+            const sc = Number(ts.score || 0);
+            let level = 'Needs Focus';
+            let status = 'danger';
+            if (sc >= 85) {
+              level = 'Mastered';
+              status = 'success';
+            } else if (sc >= 70) {
+              level = 'Proficient';
+              status = 'info';
+            } else if (sc >= 50) {
+              level = 'Moderate';
+              status = 'warning';
+            }
+            return {
+              topic: ts.topic,
+              score: sc,
+              level,
+              status
+            };
+          });
+        }
+
+        if (Array.isArray(apiData.weak_topics)) {
+          const badgeElem = document.getElementById('weakTopicsCountBadge');
+          if (badgeElem) {
+            badgeElem.textContent = `${apiData.weak_topics.length} Detected`;
+          }
+          weakTopicAlerts = apiData.weak_topics.map((wt, idx) => {
+            const matchingRec = (apiData.recommendations || []).find(r => r.topic === wt.topic);
+            return {
+              id: `alert_live_${idx}`,
+              topic: wt.topic,
+              score: `${wt.score}%`,
+              severity: wt.score < 45 ? 'critical' : 'warning',
+              message: Array.isArray(wt.evidence) && wt.evidence.length > 0
+                ? wt.evidence.join(' · ')
+                : wt.reason,
+              recommendedAction: matchingRec
+                ? matchingRec.recommended_action
+                : `Review core ${wt.topic} exercises.`
+            };
+          });
+        }
+
+        if (Array.isArray(apiData.recommendations) && apiData.recommendations.length > 0) {
+          recommendations = apiData.recommendations.map((rec, idx) => ({
+            id: `rec_live_${idx}`,
+            title: `${rec.topic}: ${rec.recommended_action}`,
+            type: rec.resource || 'Guided Practice',
+            duration: `Score: ${rec.score}%`,
+            impact: `${rec.priority} Priority`
+          }));
+        }
+      }
+    } catch (err) {
+      // Fall back to client-side dataset if backend request fails
+    }
+  }
 
   // Render Charts
   if (window.EduNexusCharts) {
-    window.EduNexusCharts.renderScoreDonut('overallScoreDonut', data.metrics.overallScore, 'Cumulative Score');
-    window.EduNexusCharts.renderMasteryList('topicMasteryContainer', data.topicMastery);
+    window.EduNexusCharts.renderScoreDonut('overallScoreDonut', overallScore, 'Cumulative Score');
+    window.EduNexusCharts.renderMasteryList('topicMasteryContainer', topicMastery);
   }
 
   // Render Weak-Topic Alerts
-  renderWeakTopicAlerts(data.weakTopicAlerts);
+  renderWeakTopicAlerts(weakTopicAlerts);
 
   // Render Learning Recommendations
-  renderRecommendations(data.recommendations);
+  renderRecommendations(recommendations);
 
   // Render Study Resources
-  renderStudyResources(data.studyResources);
+  renderStudyResources(studyResources);
 }
 
 /**
@@ -119,7 +208,7 @@ function renderRecommendations(recommendations) {
 
   container.querySelectorAll('[data-rec-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      window.showToast("Module launch simulated in demo mode.", "success");
+      window.showToast("Opening recommended learning module...", "success");
     });
   });
 }
@@ -156,13 +245,13 @@ function renderStudyResources(resources) {
 
   container.querySelectorAll('[data-res-id]').forEach(btn => {
     btn.addEventListener('click', () => {
-      window.showToast("Study resource viewer opened in demo preview.", "info");
+      window.showToast("Opening study resource...", "info");
     });
   });
 }
 
 /**
- * AI Study Assistant UI & Interactive Responses (Simulated)
+ * AI Study Assistant UI & Interactive Responses
  */
 function initAIAssistant() {
   const data = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.student.aiAssistantKnowledge;

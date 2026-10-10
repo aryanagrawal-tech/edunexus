@@ -29,6 +29,9 @@ def test_health_check(client):
     assert "database" in data
     assert "provider" in data["database"]
     assert "connected" in data["database"]
+    assert "diagnostics" in data["database"]
+    assert "failure_category" in data["database"]["diagnostics"]
+    assert "message" in data["database"]["diagnostics"]
 
 
 # ==========================================
@@ -329,7 +332,85 @@ def test_auth_register_student(client):
     assert response.status_code == 201
     data = response.get_json()
     assert data["success"] is True
-    assert data["data"]["user"]["role"] == "student"
+    user = data["data"]["user"]
+    assert user["role"] == "student"
+    assert user["table"] == "students"
+    assert user["email"] == "new.student@example.com"
+    assert "password" not in user
+
+
+def test_auth_register_duplicate_email_rejected(client):
+    payload = {
+        "fullName": "Duplicate Student",
+        "email": "aanya.demo@example.com",
+        "password": "Password123!",
+        "role": "student"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 409
+    data = response.get_json()
+    assert data["success"] is False
+    assert "already registered" in data["message"].lower()
+
+
+def test_auth_register_faculty(client):
+    payload = {
+        "fullName": "Dr. Vikram Sarabhai",
+        "email": "vikram.faculty@example.com",
+        "password": "Password123!",
+        "role": "faculty"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 201
+    data = response.get_json()
+    assert data["success"] is True
+    user = data["data"]["user"]
+    assert user["role"] == "faculty"
+    assert user["table"] == "faculty"
+    assert user["email"] == "vikram.faculty@example.com"
+
+
+def test_auth_register_invalid_email_rejected(client):
+    payload = {
+        "fullName": "Invalid Email User",
+        "email": "not-an-email",
+        "password": "Password123!",
+        "role": "student"
+    }
+    response = client.post("/auth/register", json=payload)
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data["success"] is False
+    assert "valid institutional email" in data["message"].lower()
+
+
+def test_auth_login_verifies_registered_password_hash(client):
+    reg_payload = {
+        "fullName": "Hash Test User",
+        "email": "hashtest.student@example.com",
+        "password": "StrongPassword99!",
+        "role": "student"
+    }
+    reg_res = client.post("/api/auth/register", json=reg_payload)
+    assert reg_res.status_code == 201
+
+    # Wrong password should be rejected with 401
+    bad_login = client.post("/api/auth/login", json={
+        "email": "hashtest.student@example.com",
+        "password": "WrongPassword!"
+    })
+    assert bad_login.status_code == 401
+    assert bad_login.get_json()["success"] is False
+
+    # Correct password should succeed with 200 and return the registered user's ID
+    good_login = client.post("/api/auth/login", json={
+        "email": "hashtest.student@example.com",
+        "password": "StrongPassword99!"
+    })
+    assert good_login.status_code == 200
+    good_data = good_login.get_json()
+    assert good_data["success"] is True
+    assert good_data["data"]["user"]["fullName"] == "Hash Test User"
 
 
 def test_auth_register_admin_rejected(client):
@@ -459,4 +540,50 @@ def test_api_404_handler(client):
     data = res.get_json()
     assert data["success"] is False
     assert "Endpoint not found" in data["error"]
+
+
+def test_demo_mode_disclaimers_removed_from_ui(client):
+    """Confirms that Demo Mode banners and Simulated Analytics notices are removed from all rendered views."""
+    views = [
+        "/",
+        "/login",
+        "/register",
+        "/student-dashboard",
+        "/faculty-dashboard",
+        "/admin-dashboard"
+    ]
+    removed_phrases = [
+        "Simulated Academic Analytics:",
+        "Student topic performance, weak-topic detection, and AI recommendations are loaded from client-side mock datasets. Live database sync will integrate in Phase 2.",
+        "Simulated Faculty Roster:",
+        "Simulated Admin Governance:",
+        "Simulated Prototype Mode",
+        "dashboard-demo-banner",
+        "demo-banner-badge",
+        "Active Model (Simulated)"
+    ]
+    for path in views:
+        html = client.get(path).get_data(as_text=True)
+        for phrase in removed_phrases:
+            assert phrase not in html, f"Found removed disclaimer '{phrase}' in view {path}"
+
+
+def test_ai_study_assistant_responsive_layout_css(client):
+    """Confirms that the AI Study Assistant and Student Dashboard CSS prevent horizontal overflow."""
+    dashboard_css = client.get("/static/css/dashboard.css").get_data(as_text=True)
+    components_css = client.get("/static/css/components.css").get_data(as_text=True)
+
+    # Grid columns must use minmax(0, ...) and .dashboard-grid-column must have min-width: 0
+    assert "minmax(0, 1.35fr) minmax(0, 1fr)" in dashboard_css
+    assert ".dashboard-grid-column" in dashboard_css
+    assert "overflow-x: hidden" in dashboard_css
+
+    # AI Study Assistant container, message stream, chips, and input must constrain width and wrap content
+    assert ".ai-assistant-card" in components_css
+    assert "overflow-wrap: anywhere" in components_css
+    assert ".ai-assistant-card pre" in components_css
+    assert ".ai-assistant-card code" in components_css
+    assert "flex-wrap: wrap" in components_css
+    assert "@media (max-width: 768px)" in components_css
+
 

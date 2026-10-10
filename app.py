@@ -5,12 +5,17 @@ Connects to Supabase PostgreSQL with local mock fallback.
 """
 
 import os
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 
-from services.database import db_service
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=True)
+
+from services.database import db_service, DuplicateAccountError
 from services.analytics import (
     calculate_overall_score,
     calculate_topic_scores,
@@ -20,8 +25,6 @@ from services.analytics import (
     ALLOWED_TOPICS
 )
 from services.recommendations import generate_recommendations
-
-load_dotenv()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
@@ -278,28 +281,48 @@ def analyze_performance():
 # Compatible with docs/api.md & static/js/api.js
 # ==========================================
 
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+
+
 @app.route("/auth/login", methods=["POST"])
 @app.route("/api/auth/login", methods=["POST"])
 def auth_login():
-    """User login endpoint matching existing frontend auth contract."""
+    """User login endpoint querying Supabase records when available."""
     payload = request.get_json(silent=True) or {}
-    email = payload.get("email", "").strip()
+    email = payload.get("email", "").strip().lower()
     password = payload.get("password", "")
 
     if not email or not password:
         return jsonify({"success": False, "message": "Missing email or password."}), 400
 
-    # Role matching based on institutional account structure
-    role = "faculty" if "faculty" in email else ("admin" if "admin" in email else "student")
-    name = email.split("@")[0].replace(".", " ").title()
+    # Verify stored password hash if registered during session
+    stored_hash = db_service.get_password_hash(email)
+    if stored_hash and not check_password_hash(stored_hash, password):
+        return jsonify({"success": False, "message": "Invalid email or password."}), 401
 
-    user_data = {
-        "id": f"usr_{hash(email) % 100000:05d}",
-        "fullName": name,
-        "email": email,
-        "role": role,
-        "course": "Data Structures"
-    }
+    # Check if user exists in Supabase students / faculty tables
+    existing_user = db_service.get_user_by_email(email)
+    if existing_user:
+        role = existing_user.get("role", "student")
+        user_data = {
+            "id": existing_user.get("id"),
+            "fullName": existing_user.get("fullName") or existing_user.get("name"),
+            "name": existing_user.get("name") or existing_user.get("fullName"),
+            "email": existing_user.get("email", email),
+            "role": role,
+            "course": "Data Structures"
+        }
+    else:
+        role = "faculty" if "faculty" in email else ("admin" if "admin" in email else "student")
+        name = email.split("@")[0].replace(".", " ").title()
+        user_data = {
+            "id": f"usr_{abs(hash(email)) % 100000:05d}",
+            "fullName": name,
+            "name": name,
+            "email": email,
+            "role": role,
+            "course": "Data Structures"
+        }
 
     return jsonify({
         "success": True,
@@ -315,15 +338,30 @@ def auth_login():
 @app.route("/auth/register", methods=["POST"])
 @app.route("/api/auth/register", methods=["POST"])
 def auth_register():
-    """User registration endpoint matching frontend security rules."""
+    """
+    User registration endpoint that validates fields, hashes the password,
+    and saves the new account into Supabase PostgreSQL (students or faculty table).
+    """
     payload = request.get_json(silent=True) or {}
-    full_name = payload.get("fullName", "").strip()
-    email = payload.get("email", "").strip()
-    password = payload.get("password", "")
-    role = payload.get("role", "").strip().lower()
+    full_name = (payload.get("fullName") or payload.get("name") or "").strip()
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+    role = (payload.get("role") or "").strip().lower()
 
     if not full_name or not email or not password or not role:
         return jsonify({"success": False, "message": "All fields are required."}), 400
+
+    if len(full_name) < 2:
+        return jsonify({
+            "success": False,
+            "message": "Full name must be at least 2 characters long."
+        }), 400
+
+    if not EMAIL_REGEX.match(email):
+        return jsonify({
+            "success": False,
+            "message": "Please provide a valid institutional email address."
+        }), 400
 
     if role == "admin":
         return jsonify({
@@ -331,25 +369,55 @@ def auth_register():
             "message": "Admin registration is not permitted through public portal."
         }), 403
 
+    if role not in ("student", "faculty"):
+        return jsonify({
+            "success": False,
+            "message": "Role must be either 'student' or 'faculty'."
+        }), 400
+
     if len(password) < 8:
         return jsonify({
             "success": False,
             "message": "Password must be at least 8 characters long."
         }), 400
 
-    return jsonify({
-        "success": True,
-        "message": f"Account created successfully for {full_name} as {role.upper()}.",
-        "data": {
-            "user": {
-                "id": f"usr_{int(datetime.now().timestamp())}",
-                "fullName": full_name,
-                "email": email,
-                "role": role,
-                "createdAt": datetime.now(timezone.utc).isoformat()
+    # Hash password securely before passing to service layer; never store plaintext
+    password_hash = generate_password_hash(password)
+
+    try:
+        created_user = db_service.register_user(
+            full_name=full_name,
+            email=email,
+            password_hash=password_hash,
+            role=role
+        )
+        return jsonify({
+            "success": True,
+            "message": f"Account registered and saved to database for {created_user['fullName']} as {role.upper()}.",
+            "data": {
+                "user": created_user
             }
-        }
-    }), 201
+        }), 201
+    except DuplicateAccountError as dup_err:
+        return jsonify({
+            "success": False,
+            "message": str(dup_err)
+        }), 409
+    except ValueError as val_err:
+        return jsonify({
+            "success": False,
+            "message": str(val_err)
+        }), 400
+    except RuntimeError as db_err:
+        return jsonify({
+            "success": False,
+            "message": str(db_err)
+        }), 503
+    except Exception:
+        return jsonify({
+            "success": False,
+            "message": "Database error occurred while creating the account. Registration was not saved."
+        }), 500
 
 
 @app.route("/auth/me", methods=["GET"])

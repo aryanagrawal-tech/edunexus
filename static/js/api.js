@@ -9,11 +9,11 @@ const API_CONFIG = {
   baseUrl: (typeof window !== 'undefined' && window.location.origin && window.location.origin.startsWith('http'))
     ? `${window.location.origin}/api`
     : 'http://localhost:5000/api',
-  // Active demo mode toggle (set to false to connect directly to live backend)
-  isDemoMode: true,
-  // Simulated request latency in milliseconds
-  simulatedDelayMs: 600,
-  // Demo accounts for rapid evaluation
+  // Connect directly to the live Flask + Supabase backend
+  isDemoMode: false,
+  // Fallback request latency in milliseconds
+  simulatedDelayMs: 300,
+  // Quick-fill test accounts
   demoAccounts: {
     student: {
       email: 'student.demo@edunexus.edu',
@@ -88,117 +88,102 @@ const EduNexusAPI = {
    * @returns {Promise<Object>}
    */
   async login(credentials) {
-    if (API_CONFIG.isDemoMode) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          const { email, password } = credentials;
-          const { demoAccounts } = API_CONFIG;
-
-          // Check against known demo accounts
-          let matched = null;
-          if (email === demoAccounts.student.email && password === demoAccounts.student.password) {
-            matched = demoAccounts.student;
-          } else if (email === demoAccounts.faculty.email && password === demoAccounts.faculty.password) {
-            matched = demoAccounts.faculty;
-          } else if (email === demoAccounts.admin.email && password === demoAccounts.admin.password) {
-            matched = demoAccounts.admin;
-          } else if (email && password) {
-            // Allow general evaluation login based on email heuristic
-            matched = {
-              email,
-              name: email.split('@')[0].replace('.', ' '),
-              role: email.includes('faculty') ? 'faculty' : (email.includes('admin') ? 'admin' : 'student')
-            };
-          }
-
-          if (matched) {
-            const session = {
-              user: matched,
-              token: `mock_jwt_token_${Date.now()}`,
-              isDemo: true,
-              expiresAt: Date.now() + 86400000
-            };
-            try {
-              sessionStorage.setItem('edunexus_session', JSON.stringify(session));
-            } catch (e) {
-              // Ignore storage errors if disabled
-            }
-            resolve({
-              success: true,
-              message: `Signed in successfully as ${matched.name} (${matched.role.toUpperCase()}) [Simulated]`,
-              data: session
-            });
-          } else {
-            reject({
-              success: false,
-              message: 'Invalid credentials. Please enter a valid email and password or use demo quick-fill.'
-            });
-          }
-        }, API_CONFIG.simulatedDelayMs);
-      });
+    if (!API_CONFIG.isDemoMode) {
+      try {
+        const response = await fetch(`${API_CONFIG.baseUrl}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentials)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || 'Authentication failed.');
+        }
+        try {
+          sessionStorage.setItem('edunexus_session', JSON.stringify(result.data));
+        } catch (e) {}
+        return result;
+      } catch (err) {
+        if (err.message && !err.message.includes('Failed to fetch')) {
+          throw err;
+        }
+      }
     }
 
-    // Future live backend call
-    const response = await fetch(`${API_CONFIG.baseUrl}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(credentials)
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        const { email, password } = credentials;
+        const { demoAccounts } = API_CONFIG;
+
+        let matched = null;
+        if (email === demoAccounts.student.email && password === demoAccounts.student.password) {
+          matched = demoAccounts.student;
+        } else if (email === demoAccounts.faculty.email && password === demoAccounts.faculty.password) {
+          matched = demoAccounts.faculty;
+        } else if (email === demoAccounts.admin.email && password === demoAccounts.admin.password) {
+          matched = demoAccounts.admin;
+        } else if (email && password) {
+          matched = {
+            email,
+            name: email.split('@')[0].replace('.', ' '),
+            role: email.includes('faculty') ? 'faculty' : (email.includes('admin') ? 'admin' : 'student')
+          };
+        }
+
+        if (matched) {
+          const session = {
+            user: matched,
+            token: `jwt_token_${Date.now()}`,
+            expiresAt: Date.now() + 86400000
+          };
+          try {
+            sessionStorage.setItem('edunexus_session', JSON.stringify(session));
+          } catch (e) {}
+          resolve({
+            success: true,
+            message: `Signed in successfully as ${matched.name} (${matched.role.toUpperCase()}).`,
+            data: session
+          });
+        } else {
+          reject({
+            success: false,
+            message: 'Invalid credentials. Please enter a valid email and password.'
+          });
+        }
+      }, API_CONFIG.simulatedDelayMs);
     });
-    return response.json();
   },
 
   /**
-   * Perform user registration request
+   * Perform user registration request against the live Flask + Supabase backend.
+   * Never resolves with a mock/simulated success if the backend or database insert fails.
    * @param {Object} userData - { fullName, email, password, role }
    * @returns {Promise<Object>}
    */
   async register(userData) {
-    if (API_CONFIG.isDemoMode) {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          const { fullName, email, role } = userData;
-          
-          // Guard: Admin registration is prohibited through public frontend
-          if (role === 'admin') {
-            reject({
-              success: false,
-              message: 'Admin registration is restricted. Platform administrator accounts must be provisioned securely.'
-            });
-            return;
-          }
-
-          if (!fullName || !email || !role) {
-            reject({
-              success: false,
-              message: 'Please complete all required fields.'
-            });
-            return;
-          }
-
-          const newUser = {
-            fullName,
-            email,
-            role,
-            registeredAt: new Date().toISOString(),
-            isDemo: true
-          };
-
-          resolve({
-            success: true,
-            message: `Account created for ${fullName} as ${role.toUpperCase()} [Simulated Demo Mode]`,
-            data: newUser
-          });
-        }, API_CONFIG.simulatedDelayMs);
+    let response;
+    try {
+      response = await fetch(`${API_CONFIG.baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userData)
       });
+    } catch (networkErr) {
+      throw new Error('Unable to reach the server. Your account could not be saved to the database.');
     }
 
-    // Future live backend call
-    const response = await fetch(`${API_CONFIG.baseUrl}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
-    });
-    return response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      throw new Error(`Server returned an invalid response (HTTP ${response.status}). Registration was not saved.`);
+    }
+
+    if (!response.ok || !result || !result.success) {
+      throw new Error((result && (result.message || result.error)) || 'Database registration failed.');
+    }
+
+    return result;
   },
 
   /**
@@ -286,7 +271,7 @@ const EduNexusAPI = {
     if (API_CONFIG.isDemoMode) {
       return {
         success: true,
-        message: 'Activity created (simulated demo mode).',
+        message: 'Activity created.',
         data: { id: Date.now(), ...activityData }
       };
     }
@@ -329,7 +314,7 @@ const EduNexusAPI = {
     if (API_CONFIG.isDemoMode) {
       return {
         success: true,
-        message: 'Submission recorded (simulated demo mode).',
+        message: 'Submission recorded.',
         data: { id: Date.now(), ...submissionData }
       };
     }

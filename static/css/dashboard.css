@@ -5,6 +5,8 @@
 .dashboard-page {
   background-color: var(--color-bg);
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -14,6 +16,8 @@
   display: flex;
   min-height: 100vh;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 /* Sidebar Navigation (Left Panel) */
@@ -294,6 +298,10 @@
 .dashboard-content {
   padding: var(--space-6);
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 @media (max-width: 640px) {
@@ -345,7 +353,7 @@
 /* Stats Cards Grid */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: var(--space-5);
   margin-bottom: var(--space-6);
 }
@@ -358,6 +366,7 @@
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  min-width: 0;
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -443,18 +452,28 @@
 /* Multi-column Grid Layouts */
 .grid-2col {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   margin-bottom: var(--space-6);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-grid-column {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 @media (min-width: 1024px) {
   .grid-2col {
-    grid-template-columns: 1.35fr 1fr;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   }
 
   .grid-2col-equal {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
 
@@ -466,6 +485,10 @@
   box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   overflow: hidden;
 }
 
@@ -476,11 +499,15 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .card-title-group {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
 }
 
 .card-title {
@@ -498,6 +525,7 @@
 .card-body {
   padding: var(--space-6);
   flex: 1;
+  min-width: 0;
 }
 
 /* Tables */

@@ -186,8 +186,10 @@ function initLoginForm() {
         rememberMe: rememberCheckbox ? rememberCheckbox.checked : false
       });
 
-      // Simulated success feedback
-      const role = response.data.user.role.toLowerCase();
+      // Authentication success feedback
+      const userObj = response.data.user || {};
+      const role = (userObj.role || 'student').toLowerCase();
+      const displayName = userObj.name || userObj.fullName || 'User';
       let targetDashboard = '/student-dashboard';
       if (role === 'faculty') targetDashboard = '/faculty-dashboard';
       else if (role === 'admin') targetDashboard = '/admin-dashboard';
@@ -199,17 +201,17 @@ function initLoginForm() {
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
           </svg>
           <div class="alert-content">
-            <strong>Login Successful (Demo Mode)</strong>
+            <strong>Login Successful</strong>
             <div>${response.message}</div>
             <div class="alert-subtext">
-              Redirecting to <strong>${response.data.user.role.toUpperCase()} Dashboard</strong>...
+              Redirecting to <strong>${role.toUpperCase()} Dashboard</strong>...
               <a href="${targetDashboard}" class="auth-switch-link">Click here to enter</a>
             </div>
           </div>
         `;
       }
 
-      window.showToast(`Welcome, ${response.data.user.name}! Entering dashboard...`, 'success');
+      window.showToast(`Welcome, ${displayName}! Entering dashboard...`, 'success');
 
       setTimeout(() => {
         window.location.href = targetDashboard;
@@ -376,6 +378,11 @@ function initRegisterForm() {
         role: roleVal
       });
 
+      const createdUser = response && response.data && response.data.user;
+      if (!response || !response.success || !createdUser || !createdUser.id) {
+        throw new Error((response && response.message) || 'Account could not be saved to the database.');
+      }
+
       if (formAlert) {
         formAlert.className = 'alert alert-success is-visible';
         formAlert.innerHTML = `
@@ -383,16 +390,16 @@ function initRegisterForm() {
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
           </svg>
           <div class="alert-content">
-            <strong>Registration Recorded (Demo Mode)</strong>
+            <strong>Registration Complete</strong>
             <div>${response.message}</div>
             <div class="alert-subtext">
-              You can now navigate to <a href="/login" class="auth-switch-link">Sign In</a> to test the login experience.
+              You can now navigate to <a href="/login" class="auth-switch-link">Sign In</a> to access your account.
             </div>
           </div>
         `;
       }
 
-      window.showToast(`Account registered as ${roleVal.toUpperCase()}! [Demo Mode]`, 'success');
+      window.showToast(`Account registered as ${roleVal.toUpperCase()}!`, 'success');
 
       // Clear sensitive inputs
       passwordInput.value = '';

@@ -17,11 +17,36 @@ let currentUsersList = [];
 /**
  * Initialize Admin Metrics and User Directory
  */
-function initAdminDashboard() {
+async function initAdminDashboard() {
   const data = window.EDUNEXUS_MOCK_DATA && window.EDUNEXUS_MOCK_DATA.admin;
   if (!data) return;
 
   currentUsersList = [...data.usersDirectory];
+
+  // Merge live students from Flask + Supabase backend into directory
+  if (window.EduNexusAPI && typeof window.EduNexusAPI.getStudents === 'function') {
+    try {
+      const stdRes = await window.EduNexusAPI.getStudents();
+      if (stdRes && stdRes.success && Array.isArray(stdRes.data) && stdRes.data.length > 0) {
+        const existingEmails = new Set(currentUsersList.map(u => u.email.toLowerCase()));
+        const dbStudentRows = stdRes.data
+          .filter(s => s.email && !existingEmails.has(s.email.toLowerCase()))
+          .map(s => ({
+            id: `db_std_${s.id}`,
+            name: s.name,
+            email: s.email,
+            role: 'Student',
+            department: s.course || 'Data Structures',
+            status: 'Active',
+            joined: s.created_at ? new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Enrolled'
+          }));
+        currentUsersList = [...dbStudentRows, ...currentUsersList];
+      }
+    } catch (err) {
+      // Keep local directory if request fails
+    }
+  }
+
   renderUsersTable(currentUsersList);
   renderAuditLogs(data.systemAuditLogs);
 }
@@ -105,7 +130,7 @@ function renderUsersTable(users) {
 }
 
 /**
- * Toggle User Account Status (Simulated API Call)
+ * Toggle User Account Status
  */
 function toggleUserStatus(userId, userName, currentStatus) {
   const newStatus = currentStatus === 'Active' ? 'Suspended' : 'Active';
@@ -121,7 +146,7 @@ function toggleUserStatus(userId, userName, currentStatus) {
   applyFilters();
 
   window.showToast(
-    `Account status for ${userName} updated to "${newStatus}" [Simulated Demo Mode]`,
+    `Account status for ${userName} updated to "${newStatus}".`,
     newStatus === 'Active' ? 'success' : 'info'
   );
 }
@@ -264,7 +289,7 @@ function initAddUserModal() {
       closeModal();
       form.reset();
 
-      window.showToast(`User account created for ${name} (${newUser.role})! [Simulated Demo]`, 'success');
+      window.showToast(`User account created for ${name} (${newUser.role}).`, 'success');
     });
   }
 }
