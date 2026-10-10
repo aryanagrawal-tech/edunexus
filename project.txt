@@ -1,0 +1,1 @@
+EduNexus is an intelligent academic collaboration platform that connects faculty and students through course management, study materials, assignments, assessments, performance analytics, academic risk detection, and personalized learning recommendations.
