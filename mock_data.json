@@ -1,0 +1,146 @@
+{
+  "course": "Data Structures",
+  "topics": ["Arrays", "Linked Lists", "Stacks", "Queues", "Recursion"],
+  "students": [
+    {
+      "id": 1,
+      "name": "Aanya Patel",
+      "email": "aanya.demo@example.com",
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 2,
+      "name": "Rohan Shah",
+      "email": "rohan.demo@example.com",
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 3,
+      "name": "Meera Joshi",
+      "email": "meera.demo@example.com",
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 4,
+      "name": "Arjun Desai",
+      "email": "arjun.demo@example.com",
+      "created_at": "2026-10-10T05:32:00.000Z"
+    }
+  ],
+  "activities": [
+    {
+      "id": 1,
+      "title": "Arrays Quiz 1",
+      "topic": "Arrays",
+      "activity_type": "Quiz",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 2,
+      "title": "Arrays Assignment",
+      "topic": "Arrays",
+      "activity_type": "Assignment",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 3,
+      "title": "Linked Lists Quiz",
+      "topic": "Linked Lists",
+      "activity_type": "Quiz",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 4,
+      "title": "Stacks Practice",
+      "topic": "Stacks",
+      "activity_type": "Practice",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 5,
+      "title": "Queues Quiz",
+      "topic": "Queues",
+      "activity_type": "Quiz",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 6,
+      "title": "Recursion Quiz",
+      "topic": "Recursion",
+      "activity_type": "Quiz",
+      "max_score": 100,
+      "created_at": "2026-10-10T05:32:00.000Z"
+    }
+  ],
+  "submissions": [
+    {
+      "id": 1,
+      "student_id": 1,
+      "activity_id": 1,
+      "score": 40,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 2,
+      "student_id": 1,
+      "activity_id": 2,
+      "score": 45,
+      "status": "late",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 3,
+      "student_id": 1,
+      "activity_id": 3,
+      "score": 72,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 4,
+      "student_id": 2,
+      "activity_id": 1,
+      "score": 62,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 5,
+      "student_id": 2,
+      "activity_id": 3,
+      "score": 48,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 6,
+      "student_id": 3,
+      "activity_id": 4,
+      "score": 44,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 7,
+      "student_id": 3,
+      "activity_id": 5,
+      "score": 70,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    },
+    {
+      "id": 8,
+      "student_id": 4,
+      "activity_id": 6,
+      "score": 46,
+      "status": "submitted",
+      "submitted_at": "2026-10-10T05:32:00.000Z"
+    }
+  ]
+}

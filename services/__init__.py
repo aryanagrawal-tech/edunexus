@@ -1,0 +1,3 @@
+"""
+EduNexus AI — Services Package
+"""

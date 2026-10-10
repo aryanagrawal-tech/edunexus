@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Faculty Course Dashboard - EduNexus AI. Cohort analytics, at-risk student detection, and academic interventions.">
+  <title>Faculty Dashboard | EduNexus AI</title>
+
+  <!-- External CSS Stylesheets Only -->
+  <link rel="stylesheet" href="../static/css/variables.css">
+  <link rel="stylesheet" href="../static/css/base.css">
+  <link rel="stylesheet" href="../static/css/dashboard.css">
+  <link rel="stylesheet" href="../static/css/components.css">
+</head>
+<body class="dashboard-page">
+
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <!-- Sidebar Navigation -->
+    <aside id="appSidebar" class="app-sidebar" aria-label="Faculty Navigation">
+      <div class="sidebar-header">
+        <a href="faculty-dashboard.html" class="sidebar-logo-wrap">
+          <svg class="sidebar-logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+          <div>
+            <div class="sidebar-brand-name">EduNexus AI</div>
+            <span class="sidebar-role-badge">Faculty Portal</span>
+          </div>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav">
+        <span class="nav-section-title">Course Management</span>
+        <a href="#overview" class="nav-link is-active">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Course Overview</span>
+        </a>
+
+        <a href="#analytics" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="20" x2="18" y2="10"></line>
+            <line x1="12" y1="20" x2="12" y2="4"></line>
+            <line x1="6" y1="20" x2="6" y2="14"></line>
+          </svg>
+          <span>Topic Analytics</span>
+        </a>
+
+        <a href="#at-risk" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+          <span>At-Risk Students</span>
+          <span class="nav-link-pill">4 Flagged</span>
+        </a>
+
+        <a href="#assessments" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          <span>Assessments</span>
+        </a>
+
+        <span class="nav-section-title">Portals</span>
+        <a href="student-dashboard.html" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+            <path d="M6 12v5c3 3 9 3 12 0v-5"></path>
+          </svg>
+          <span>Student Portal</span>
+        </a>
+
+        <a href="admin-dashboard.html" class="nav-link">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>Admin Console</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-snippet">
+          <div class="user-avatar" aria-hidden="true">SM</div>
+          <div class="user-info">
+            <div class="user-name">Dr. Sarah Mitchell</div>
+            <div class="user-role-label">Associate Professor</div>
+          </div>
+          <button type="button" class="logout-icon-btn" data-action="logout" aria-label="Sign out">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      <!-- Topbar Header -->
+      <header class="app-topbar">
+        <div class="topbar-left">
+          <button type="button" id="sidebarToggleBtn" class="sidebar-toggle-btn" aria-label="Toggle navigation menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div class="topbar-title-wrap">
+            <h1 class="topbar-page-title">Faculty Course Dashboard</h1>
+            <span class="topbar-subtitle">Department of Computer Science</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <!-- Course Selector Dropdown -->
+          <div class="role-switcher-wrap">
+            <label for="facultyCourseSelect" class="role-switcher-label">Course:</label>
+            <select id="facultyCourseSelect" class="role-switcher-select">
+              <option value="CS301" selected>CS-301: Data Structures & Algorithms</option>
+              <option value="CS305">CS-305: AI Systems Architecture</option>
+            </select>
+          </div>
+
+          <!-- Role Switcher -->
+          <div class="role-switcher-wrap">
+            <label for="roleSwitcherSelect" class="role-switcher-label">View As:</label>
+            <select id="roleSwitcherSelect" class="role-switcher-select">
+              <option value="student">Student</option>
+              <option value="faculty" selected>Faculty</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <!-- Dashboard Body -->
+      <div class="dashboard-content" id="overview">
+        <!-- Transparent Prototype Mode Banner -->
+        <div class="dashboard-demo-banner" role="status">
+          <div class="demo-banner-body">
+            <span class="demo-banner-badge">Demo Mode</span>
+            <div class="demo-banner-text">
+              <strong>Simulated Faculty Roster:</strong> Class statistics, topic performance charts, and intervention actions are simulated on client side. Backend database integration will connect in Phase 2.
+            </div>
+          </div>
+        </div>
+
+        <!-- Metric Stat Cards -->
+        <section class="stats-grid" aria-label="Course Overview Highlights">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Enrolled Students</span>
+              <div class="stat-icon-wrap stat-icon-blue" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-card-value" id="statEnrolledCount">48</div>
+            <div class="stat-card-meta">2 Sections Active</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Class Average</span>
+              <div class="stat-icon-wrap stat-icon-green" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-card-value" id="statClassAverage">74.2%</div>
+            <div class="stat-card-meta">
+              <span class="trend-positive">+1.8%</span> above departmental target
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Students Needing Support</span>
+              <div class="stat-icon-wrap stat-icon-amber" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-card-value" id="statAtRiskCount">6</div>
+            <div class="stat-card-meta">
+              <span class="trend-attention">Action required</span> on 2 students
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Attendance Rate</span>
+              <div class="stat-icon-wrap stat-icon-purple" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </div>
+            </div>
+            <div class="stat-card-value" id="statAttendanceRate">91.2%</div>
+            <div class="stat-card-meta">
+              <span class="trend-positive">Stable</span> over 6 weeks
+            </div>
+          </div>
+        </section>
+
+        <!-- Topic Mastery Distribution Chart -->
+        <section class="dashboard-card mb-6" id="analytics" aria-labelledby="topicChartTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="topicChartTitle" class="card-title">Cohort Topic Performance Distribution</h2>
+              <span class="card-subtitle">Class average comparison across key syllabus modules</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="facultyTopicChart" class="chart-container"></div>
+          </div>
+        </section>
+
+        <!-- Students Needing Support Section -->
+        <section class="dashboard-card mb-6" id="at-risk" aria-labelledby="atRiskTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="atRiskTitle" class="card-title">Students Needing Academic Support</h2>
+              <span class="card-subtitle">Algorithmic risk triggers based on quiz scores, submission velocity, and attendance</span>
+            </div>
+            <span class="badge badge-demo">Evidence-Based Triggers</span>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="data-table" aria-label="At-Risk Students Table">
+                <thead>
+                  <tr>
+                    <th scope="col">Student Details</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Risk Level</th>
+                    <th scope="col">Diagnostic Trigger Factors</th>
+                    <th scope="col">Last Active</th>
+                    <th scope="col">Suggested Intervention</th>
+                  </tr>
+                </thead>
+                <tbody id="atRiskTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- Assessment Management Interface -->
+        <section class="dashboard-card" id="assessments" aria-labelledby="assessmentsTitle">
+          <div class="card-header">
+            <div class="card-title-group">
+              <h2 id="assessmentsTitle" class="card-title">Course Activity & Assessments</h2>
+              <span class="card-subtitle">Recent quizzes, midterm exams, and submission rates</span>
+            </div>
+            <button type="button" id="createAssessmentBtn" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Create Assessment</span>
+            </button>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="data-table" aria-label="Course Assessments Table">
+                <thead>
+                  <tr>
+                    <th scope="col">Assessment Title</th>
+                    <th scope="col">Date / Due</th>
+                    <th scope="col">Submissions</th>
+                    <th scope="col">Class Average</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="assessmentsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Academic Intervention Modal Dialog -->
+  <div id="interventionModalBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modalTitle" class="modal-title">Dispatch Academic Intervention</h3>
+        <button type="button" id="closeModalBtn" class="modal-close-btn" aria-label="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Student Recipient</label>
+          <div id="modalStudentName" class="cell-title">Student Name</div>
+        </div>
+
+        <div class="form-group">
+          <label for="modalSuggestedAction" class="form-label">Intervention Type</label>
+          <input 
+            type="text" 
+            id="modalSuggestedAction" 
+            class="form-input" 
+            value="Schedule 1-on-1 Academic Counseling"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="modalInterventionNotes" class="form-label">Counseling Notes / Action Items</label>
+          <textarea 
+            id="modalInterventionNotes" 
+            class="form-input" 
+            rows="3"
+          ></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="cancelModalBtn" class="btn btn-outline">Cancel</button>
+        <button type="button" id="confirmInterventionBtn" class="btn btn-primary">Dispatch Intervention</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="auth-toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- External JavaScript Files Only -->
+  <script src="../static/js/api.js"></script>
+  <script src="../static/js/mock-data.js"></script>
+  <script src="../static/js/charts.js"></script>
+  <script src="../static/js/faculty.js"></script>
+</body>
+</html>

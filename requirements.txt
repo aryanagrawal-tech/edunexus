@@ -1,0 +1,6 @@
+Flask>=3.0.0
+flask-cors>=5.0.0
+python-dotenv>=1.0.0
+supabase>=2.0.0
+gunicorn>=21.0.0
+pytest>=8.0.0
